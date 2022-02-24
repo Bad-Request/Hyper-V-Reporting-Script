@@ -1,4 +1,4 @@
-﻿<#
+<#
 	.SYNOPSIS
     
 		Get-HyperVReport.ps1 (aka Hyper-V Reporting Script) can be used to report Hyper-V Cluster or Standalone environments.
@@ -19,7 +19,7 @@
 
 		Version History:
 
-			[x] Version 1.5 - 05.March.2015
+			[x] Version 1.6 - 24.February.2022
 
 		Requirements:
 
@@ -396,7 +396,7 @@ function sGet-Wmi {
     Try
     {
         # $wmiCommand
-        $wmiResult = iex $wmiCommand
+        $wmiResult = Invoke-Expression $wmiCommand
     }
     Catch
     {
@@ -405,7 +405,7 @@ function sGet-Wmi {
     }
     
     # If wmiResult is null
-    if ($wmiResult -eq $null)
+    if ($null -eq $wmiResult)
     {
         $wmiResult = "Result is null"
         $ResultCode = "2"
@@ -450,6 +450,8 @@ Function sPrint {
     }
     elseif ($Type -eq 5)
     {
+        
+        if ($debug) { Write-Host "[DEBUG] - $Time - $Message" -ForegroundColor Cyan}
         if (($WriteToLogFile) -and ($Logging))
         {
             Add-Content -Path $LogFile -Value "[DEBUG]   - $TimeStamp - $Message"
@@ -524,7 +526,7 @@ Function sConvert-Size {
             $DiskVolumeSpaceUnit = "TB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif ($DiskVolumeSpace -eq $null)
+        elseif ($null -eq $DiskVolumeSpace)
         {
             $DiskVolumeSpace =  "N/A"
             $DiskVolumeSpaceUnit = "-"
@@ -708,8 +710,10 @@ Function sConvert-VolumeSizeColors {
 #region Variables
 #----------------
 
+$debug = $true
+
 # Print MSG
-sPrint -Type 1 -Message "Started! Hyper-V Reporting Script (Version 1.5)"
+sPrint -Type 1 -Message "Started! Hyper-V Reporting Script (Version 1.6)"
 Start-Sleep -Seconds 3
 
 # State Colors
@@ -814,9 +818,9 @@ $osVersion = sGet-Wmi -ComputerName $env:COMPUTERNAME -Namespace root\Cimv2 -Cla
 
     if ($osVersion)
     {
-        if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*"))
+        if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*") -or ($osVersion -like "10.*"))
         {
-            if ($osName -like "Microsoft Windows 8*")
+            if (($osName -like "Microsoft Windows 8*") -or ($osName -like "Microsoft Windows 10*"))
             {
                 sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Operating system is supported as script runtime environment." -WriteToLogFile $True
 
@@ -835,10 +839,12 @@ $osVersion = sGet-Wmi -ComputerName $env:COMPUTERNAME -Namespace root\Cimv2 -Cla
                 # Check Failover Cluster PowerShell
                 if ($Cluster)
                 {
-                    if (Get-Hotfix -ID KB2693643 -ErrorAction SilentlyContinue)
+                    if (($osName -like "Microsoft Windows 10*") -or (Get-Hotfix -ID KB2693643 -ErrorAction SilentlyContinue))
                     {
                         if ((Get-WindowsOptionalFeature -FeatureName RemoteServerAdministrationTools-Features-Clustering -Online).State -eq "Enabled")
                         {
+                            sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
+                        } elseif (Get-Module -ListAvailable FailoverClusters) {
                             sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
                         }
                         else
@@ -870,7 +876,7 @@ $osVersion = sGet-Wmi -ComputerName $env:COMPUTERNAME -Namespace root\Cimv2 -Cla
                     sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is not found." -WriteToLogFile $True
                     sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Installing Hyper-V PowerShell Module... " -WriteToLogFile $True
                     Start-Sleep -Seconds 3
-                    Add-WindowsFeature -Name "Hyper-V-PowerShell" -ErrorAction SilentlyContinue | Out-Null
+                    #Add-WindowsFeature -Name "Hyper-V-PowerShell" -ErrorAction SilentlyContinue | Out-Null
 
                     if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "Hyper-V-PowerShell").Installed)
                     {
@@ -896,7 +902,7 @@ $osVersion = sGet-Wmi -ComputerName $env:COMPUTERNAME -Namespace root\Cimv2 -Cla
                         sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is not found." -WriteToLogFile $True
                         sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Installing Failover Clustering PowerShell Module..." -WriteToLogFile $True
                         Start-Sleep -Seconds 3
-                        Add-WindowsFeature -Name "RSAT-Clustering-PowerShell" | Out-Null
+                        #Add-WindowsFeature -Name "RSAT-Clustering-PowerShell" | Out-Null
 
                         if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "RSAT-Clustering-PowerShell").Installed)
                         {
@@ -1151,7 +1157,7 @@ if ($Cluster) {
             $osVersion = $null
             $getClusterOwnerNode = Get-ClusterNode -Cluster $ClusterName -Name $clusterOwnerHostName
             $osVersion = ($getClusterOwnerNode.MajorVersion).ToString() + "." + ($getClusterOwnerNode.MinorVersion).ToString()
-            if (($osVersion -like "6.2") -or ($osVersion -like "6.3"))
+            if (($osVersion -like "6.2") -or ($osVersion -like "6.3") -or ($osVersion -like "10.*"))
             {
                 if ((Get-WindowsFeature -ComputerName $clusterOwnerHostName -Name "Hyper-V").Installed)
                 {
@@ -1239,7 +1245,7 @@ if ($VMHost) {
 
         if ($OsVersion)
         {
-            if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*"))
+            if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*") -or ($OsVersion -like "10.*"))
             {
                 if ((Get-WindowsFeature -ComputerName $ComputerName -Name "Hyper-V").Installed)
                 {
@@ -2137,7 +2143,7 @@ ForEach ($VMHostItem in $VMHosts) {
             if ($vmDisks -eq $null)
             {
                  $vmDiskOutput = "
-                <td rowspan=""0""><p style=""text-align:left""><span style=""background-color:$($stateBgColors[4]);color:$($stateWordColors[4])"">&nbsp;Does not have a virtual disk&nbsp;</span></p></td>"
+                <td ><p style=""text-align:left""><span style=""background-color:$($stateBgColors[4]);color:$($stateWordColors[4])"">&nbsp;Does not have a virtual disk&nbsp;</span></p></td>"
                 $highL = $true
             }
             else
@@ -2196,9 +2202,12 @@ ForEach ($VMHostItem in $VMHosts) {
                        }
                     }
 
+                    sPrint -Type 5 -Message "$($VM.Name): Disk - $($vmDisk.Path)" -WriteToLogFile $False
+
                     # If differencing exist
-                    if ($vmDisk.ParentPath)
+                    if (!([string]::IsNullOrEmpty($vmDisk.ParentPath)))
                     {
+                        sPrint -Type 5 -Message "$($VM.Name): Parent Disk - $($vmDisk.ParentPath)" -WriteToLogFile $False
                         # Checkpoint label
                         $cpNumber = $null
                         $cpNumber = $vmChekpointCount
@@ -2277,7 +2286,7 @@ ForEach ($VMHostItem in $VMHosts) {
                             $vmDiskData += "<p style=""margin-top:5px;text-align:left;text-indent:1nd3ntPlaceHolderpx""><abbr title=""$($vmDiskPath)"">$($vmDiskName)<span style=""font-size:10px;color:orange""> *</span></abbr> <br><span style=""display:inline-block;text-indent:1nd3ntPlaceHolderpx;font-size:10px;color:#BDBDBD"">&#10148; CurrentFileSize $($vmDiskFileSize[0])$($vmDiskFileSize[1]) (MaximumDiskSize $($vmDiskMaxSize[0])$($vmDiskMaxSize[1]))</span> <br><span style=""display:inline-block;text-indent:1nd3ntPlaceHolderpx;font-size:10px;color:#BDBDBD"">&#10148; $($vmDiskType) VHD | $($vmDiskControllerType) Controller | Fragmentation <span style=""color:$($vmDiskFragmentationTextColor);background-color:$($vmDiskFragmentationBgColor)"">$($vmDiskFragmentation)</span></span></p>"
                             $parentPath = $vmDiffDisk.ParentPath
                         }
-                        Until ($parentPath -eq $null)
+                        Until ([string]::IsNullOrEmpty($parentPath))
                     }
                     else
                     {
@@ -2345,10 +2354,15 @@ ForEach ($VMHostItem in $VMHosts) {
                 }
             }
 
+
             #If single VHD, rowSpanCount equal to 0 
+            $rowspanHTML = ""
             if ($rowSpanCount -eq 1)
             {
                 $rowSpanCount = 0
+                
+            } else {
+                $rowspanHtml = "rowspan=""$($rowspanCount)"""
             }
             
             # VM Memory Information
@@ -2371,12 +2385,17 @@ ForEach ($VMHostItem in $VMHosts) {
                 $outVmMemMax = sConvert-Size -DiskVolumeSpace $VM.MemoryMaximum -DiskVolumeSpaceUnit byte
                 $outVmMemMin = sConvert-Size -DiskVolumeSpace $VM.MemoryMinimum -DiskVolumeSpaceUnit byte
 
+                #$rowspanHTML = ""
                 # Charge chargerVmMemoryTable
+                <# if ($rowspanCount -gt 0) {
+                    $rowspanHtml = "rowspan=""$($rowspanCount)"""
+                } #>
+                                   
                 $chargerVmMemoryTable ="
-                <td rowspan=""$($rowSpanCount)"" style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Startup)"">$($outVmMemStartup[0])<br><span style=""font-size:10px"">$($outVmMemStartup[1])</span></abbr></p></td>
-                <td rowspan=""$($rowSpanCount)"" style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Minimum)"">$($outVmMemMin[0])<br><span style=""font-size:10px"">$($outVmMemMin[1])</span></abbr></p></td>
-                <td rowspan=""$($rowSpanCount)"" style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Maximum)"">$($outVmMemMax[0])<br><span style=""font-size:10px"">$($outVmMemMax[1])</span></abbr></p></td>
-                <td rowspan=""$($rowSpanCount)""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Assigned)"">$($outVmMemAssigned[0])<br><span style=""font-size:10px"">$($outVmMemAssigned[1])</span></abbr></p></td>"
+                <td $($rowspanHTML) style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Startup)"">$($outVmMemStartup[0])<br><span style=""font-size:10px"">$($outVmMemStartup[1])</span></abbr></p></td>
+                <td $($rowspanHTML) style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Minimum)"">$($outVmMemMin[0])<br><span style=""font-size:10px"">$($outVmMemMin[1])</span></abbr></p></td>
+                <td $($rowspanHTML) style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Maximum)"">$($outVmMemMax[0])<br><span style=""font-size:10px"">$($outVmMemMax[1])</span></abbr></p></td>
+                <td $($rowspanHTML)><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Assigned)"">$($outVmMemAssigned[0])<br><span style=""font-size:10px"">$($outVmMemAssigned[1])</span></abbr></p></td>"
             }
             else
             {
@@ -2385,24 +2404,24 @@ ForEach ($VMHostItem in $VMHosts) {
 
                 # Charge chargerVmMemoryTable
                 $chargerVmMemoryTable ="
-                <td rowspan=""$($rowSpanCount)"" colspan=""4""><p style=""line-height:1.1""><abbr title=""Static Memory (Startup)"">$($outVmMemStartup[0])<br><span style=""font-size:10px"">$($outVmMemStartup[1])</span></abbr></p></td>"
+                <td $($rowspanHTML) colspan=""4""><p style=""line-height:1.1""><abbr title=""Static Memory (Startup)"">$($outVmMemStartup[0])<br><span style=""font-size:10px"">$($outVmMemStartup[1])</span></abbr></p></td>"
             }
 
             # Data Line
             $chargerVmTable +="
             <tr style=""background:$($vmTableTrBgColor)""><!--Data Line-->
-                <td rowspan=""$($rowSpanCount)""><p style=""text-align:left""><abbr title=""$($outVmPath)"">$($outVmName) <span style=""font-size:10px;color:orange"">*</span></abbr> $($outVmGenVer) <br>IsClustered:$($outVmIsClustered)</span></p></td>
-                <td rowspan=""$($rowSpanCount)"" bgcolor=""$vmStateBgColor""><p style=""color:$($vmStateWordColor)"">$($outVmState)</p></td>
-                <td rowspan=""$($rowSpanCount)""><p>$($outVmUptimeDays)$($outVmUptime)</p></td>
-                <td rowspan=""$($rowSpanCount)""><p>$($outVmHost)</p></td>
-                <td rowspan=""$($rowSpanCount)""><p style=""line-height:1.1"">$($outVmCPU)<br><span style=""font-size:10px"">CPU</span></p></td>"
+                <td $($rowspanHTML)><p style=""text-align:left""><abbr title=""$($outVmPath)"">$($outVmName) <span style=""font-size:10px;color:orange"">*</span></abbr> $($outVmGenVer) <br>IsClustered:$($outVmIsClustered)</span></p></td>
+                <td $($rowspanHTML) bgcolor=""$vmStateBgColor""><p style=""color:$($vmStateWordColor)"">$($outVmState)</p></td>
+                <td $($rowspanHTML)><p>$($outVmUptimeDays)$($outVmUptime)</p></td>
+                <td $($rowspanHTML)><p>$($outVmHost)</p></td>
+                <td $($rowspanHTML)><p style=""line-height:1.1"">$($outVmCPU)<br><span style=""font-size:10px"">CPU</span></p></td>"
             $chargerVmTable += $chargerVmMemoryTable
             
             $chargerVmTable +="
-                <td rowspan=""$($rowSpanCount)""><p style=""background-color:$($vmIsStateBgColor);color:$($vmIsStateWordColor)""><abbr title=""IS Version: $($outVmIsVer)"">$($outVmIs) <span style=""font-size:10px;color:orange"">*</span></abbr></p></td>
-                <td rowspan=""$($rowSpanCount)""><p style=""background-color:$($vmCheckpointBgColor);color:$($vmCheckpointWordColor)""><abbr title=""$($outVmChekpointCount)"">$($outVmChekpoint)</abbr></p></td>
-                <td rowspan=""$($rowSpanCount)"">$($outVmRepl)</td>
-                <td rowspan=""$($rowSpanCount)"">$($outVmNetAdapter)</td>"
+                <td $($rowspanHTML)><p style=""background-color:$($vmIsStateBgColor);color:$($vmIsStateWordColor)""><abbr title=""IS Version: $($outVmIsVer)"">$($outVmIs) <span style=""font-size:10px;color:orange"">*</span></abbr></p></td>
+                <td $($rowspanHTML)><p style=""background-color:$($vmCheckpointBgColor);color:$($vmCheckpointWordColor)""><abbr title=""$($outVmChekpointCount)"">$($outVmChekpoint)</abbr></p></td>
+                <td $($rowspanHTML)>$($outVmRepl)</td>
+                <td $($rowspanHTML)>$($outVmNetAdapter)</td>"
 		        $chargerVmTable += $vmDiskOutput
 
             # Output Data
@@ -3375,7 +3394,7 @@ $outClusterOverview = "
 
 $outHtmlEnd ="
 </div><!--End ReportBody-->
-<center><p style=""font-size:12px;color:#BDBDBD"">ScriptVersion: 1.5 | Find More Useful Tools Like This at https://github.com/ghostinthewires </p></center>
+<center><p style=""font-size:12px;color:#BDBDBD"">ScriptVersion: 1.6 | Based on more original script at https://github.com/ghostinthewires </p></center>
 <br>
 </body>
 </html>"
