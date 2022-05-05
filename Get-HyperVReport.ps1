@@ -1,4 +1,4 @@
-<#
+﻿<#
 	.SYNOPSIS
     
 		Get-HyperVReport.ps1 (aka Hyper-V Reporting Script) can be used to report Hyper-V Cluster or Standalone environments.
@@ -254,87 +254,97 @@
 #region Script Parameters
 # -----------------------
 
-[CmdletBinding(SupportsShouldProcess=$True)]
+[CmdletBinding(SupportsShouldProcess = $True, DefaultParameterSetName = 'Cluster')]
 
 Param (
     
     [parameter(
-                Mandatory=$false,
-                HelpMessage='Hyper-V Cluster name (like HvCluster1 or hvcluster1.domain.corp')]
+        ParameterSetName = "Cluster",
+        Mandatory = $false,
+        HelpMessage = 'Hyper-V Cluster name (like HvCluster1 or hvcluster1.domain.corp')]
                
-                [string]$Cluster,
+    [string]$Cluster,
 
     [parameter(
-                Mandatory=$false,
-                HelpMessage='Standalone Hyper-V Host name(s) (like Host1, Host2, Host3)')]
+        ParameterSetName = "Standalone",
+        Mandatory = $false,
+        HelpMessage = 'Standalone Hyper-V Host name(s) (like Host1, Host2, Host3)')]
                
-                [array]$VMHost,
+    [array]$VMHost,
 
     [parameter(
-                Mandatory=$false,
-                HelpMessage='Reports that shown only highlighted events and alerts')]
-               
-                [bool]$HighlightsOnly = $false,
+        ParameterSetName = "Cluster",
+        Mandatory = $false,
+        HelpMessage = 'Reports that shown only highlighted events and alerts')]
+    [parameter(ParameterSetName = "Standalone")]               
+    [switch]$HighlightsOnly = $false,
     
+    [parameter( ParameterSetName = "Cluster",
+        Mandatory = $false,
+        HelpMessage = 'Disk path for HTML reporting file')]
+    [parameter(ParameterSetName = "Standalone")]            
+    [string]$ReportFilePath = (Get-Location).path,
+
+    [parameter( ParameterSetName = "Cluster",
+        Mandatory = $false,
+        HelpMessage = 'Adds a prefix to the HTML report file name (The default nameprefix is HyperVReport)')]
+    [parameter(ParameterSetName = "Standalone")]            
+    [string]$ReportFileNamePrefix = "HyperVReport",
+
+    [parameter( ParameterSetName = "Cluster",
+        Mandatory = $false,
+        HelpMessage = 'Adds Timestamp to HTML report file name (The default is $true)')]
+    [parameter(ParameterSetName = "Standalone")]          
+    [switch]$ReportFileNameTimeStamp = $false,
+
+    [parameter( 
+        ParameterSetName = 'Email',
+        Mandatory = $false,
+        HelpMessage = 'Activates the e-mail sending feature ($true/$false). The default value is "$false"')]
+    [parameter(ParameterSetName = "Standalone")] 
+    [parameter(ParameterSetName = "Cluster")]           
+    [switch]$SendMail,
+
     [parameter(
-                Mandatory=$false,
-                HelpMessage='Disk path for HTML reporting file')]
+        Mandatory = $true,
+        ParameterSetName = 'Email',
+        HelpMessage = 'SMTP Server Address (Like IP address, hostname or FQDN)')]
+
+    [string]$SMTPServer,
+
+    [parameter(
+        Mandatory = $false,
+        ParameterSetName = 'Email',
+        HelpMessage = 'SMTP Server port number (Default 25)')]
+
+    [int]$SMTPPort = "25",
+
+    [parameter(
+        Mandatory = $true,
+        ParameterSetName = 'Email',
+        HelpMessage = 'Recipient e-mail address')]
+             
+    [array]$MailTo,
+
+    [parameter(
+        Mandatory = $true,
+        ParameterSetName = 'Email',
+        HelpMessage = 'Sender e-mail address')]
                
-                [string]$ReportFilePath = (Get-Location).path,
+    [string]$MailFrom,
 
     [parameter(
-                Mandatory=$false,
-                HelpMessage='Adds a prefix to the HTML report file name (The default nameprefix is HyperVReport)')]
-               
-                [string]$ReportFileNamePrefix = "HyperVReport",
+        Mandatory = $false,
+        ParameterSetName = 'Email',
+        HelpMessage = 'Sender e-mail address password for SMTP authentication (If needed)')]
+    #TODO needs changing to securestring
+    [securestring]$MailFromPassword,
 
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='Adds Timestamp to HTML report file name (The default is $true)')]
-               
-                [bool]$ReportFileNameTimeStamp = $false,
+    [parameter( ParameterSetName = "Email",
+        Mandatory = $false,
+        HelpMessage = 'SMTP TLS/SSL option ($true/$false). The default value is "$false"')]
 
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='Activates the e-mail sending feature ($true/$false). The default value is "$false"')]
-               
-                [bool]$SendMail = $false,
-
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='SMTP Server Address (Like IP address, hostname or FQDN)')]
-            
-                [string]$SMTPServer,
-
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='SMTP Server port number (Default 25)')]
-            
-                [int]$SMTPPort = "25",
-
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='Recipient e-mail address')]
-               
-                [array]$MailTo,
-
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='Sender e-mail address')]
-               
-                [string]$MailFrom,
-
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='Sender e-mail address password for SMTP authentication (If needed)')]
-               
-                [string]$MailFromPassword,
-
-    [parameter(
-                Mandatory=$false,
-                HelpMessage='SMTP TLS/SSL option ($true/$false). The default value is "$false"')]
-            
-                [bool]$SMTPServerTLSorSSL = $false
+    [switch]$SMTPServerTLSorSSL
 )
 
 #endregion Script Parameters
@@ -343,7 +353,7 @@ Param (
 #----------------
 
 # Get WMI data
-function sGet-Wmi {
+function Get-WmiExt {
 
     param (
 
@@ -371,42 +381,36 @@ function sGet-Wmi {
     $wmiCommand = "gwmi -ComputerName $ComputerName -Namespace $Namespace -Class $Class -ErrorAction Stop"
 
     # If available, add Filter parameter
-    if ($Filter)
-    {
+    if ($Filter) {
         # $Filter = ($Filter -join ',').ToString()
         $Filter = [char]34 + $Filter + [char]34
         $wmiCommand += " -Filter $Filter"
     }
 
     # If available, add Property parameter
-    if ($Property)
-    {
+    if ($Property) {
         $Property = ($Property -join ',').ToString()
         $wmiCommand += " -Property $Property"
     }
 
     # If available, Authentication and Impersonation
-    if ($AI)
-    {
+    if ($AI) {
         $wmiCommand += " -Authentication PacketPrivacy -Impersonation Impersonate"
     }
 
     # Try to connect
     $ResultCode = "1"
-    Try
-    {
+    Try {
         # $wmiCommand
         $wmiResult = Invoke-Expression $wmiCommand
     }
-    Catch
-    {
+    Catch {
         $wmiResult = $_.Exception.Message
         $ResultCode = "0"
     }
     
     # If wmiResult is null
-    if ($null -eq $wmiResult)
-    {
+    if ($null -eq $wmiResult) {
         $wmiResult = "Result is null"
         $ResultCode = "2"
     }
@@ -419,7 +423,7 @@ Function sPrint {
 
     param( 
         
-        [byte]$Type=1,
+        [byte]$Type = 1,
 
         [string]$Message,
         
@@ -430,189 +434,190 @@ Function sPrint {
     $TimeStamp = Get-Date -Format "dd.MMM.yyyy HH:mm:ss"
     $Time = Get-Date -Format "HH:mm:ss"
 
-    if ($Type -eq 1)
-    {
+    if ($Type -eq 1) {
         Write-Host "[INFO]    - $Time - $Message" -ForegroundColor Green
 
-        if (($WriteToLogFile) -and ($Logging))
-        {
+        if (($WriteToLogFile) -and ($Logging)) {
             Add-Content -Path $LogFile -Value "[INFO]    - $TimeStamp - $Message"
         }
     }
-    elseif ($Type -eq 2)
-    {
+    elseif ($Type -eq 2) {
         Write-Host "[WARNING] - $Time - $Message" -ForegroundColor Yellow
 
-        if (($WriteToLogFile) -and ($Logging))
-        {
+        if (($WriteToLogFile) -and ($Logging)) {
             Add-Content -Path $LogFile -Value "[WARNING] - $TimeStamp - $Message"
         }
     }
-    elseif ($Type -eq 5)
-    {
+    elseif ($Type -eq 5) {
         
-        if ($debug) { Write-Host "[DEBUG] - $Time - $Message" -ForegroundColor Cyan}
-        if (($WriteToLogFile) -and ($Logging))
-        {
+        if ($debug) { Write-Host "[DEBUG] - $Time - $Message" -ForegroundColor Cyan }
+        if (($WriteToLogFile) -and ($Logging)) {
             Add-Content -Path $LogFile -Value "[DEBUG]   - $TimeStamp - $Message"
         }
     }
-        elseif ($Type -eq 6)
-    {
-        if (($WriteToLogFile) -and ($Logging))
-        {
+    elseif ($Type -eq 6) {
+        if (($WriteToLogFile) -and ($Logging)) {
             Add-Content -Path $LogFile -Value ""
         }
     }
-    elseif ($Type -eq 0)
-    {
+    elseif ($Type -eq 0) {
         Write-Host "[ERROR]   - $Time - $Message" -ForegroundColor Red
 
-        if (($WriteToLogFile) -and ($Logging))
-        {
+        if (($WriteToLogFile) -and ($Logging)) {
             Add-Content -Path $LogFile -Value "[ERROR]   - $TimeStamp - $Message"
         }
     }
-    else
-    {
+    else {
         Write-Host "[UNKNOWN] - $Time - $Message" -ForegroundColor Gray
 
-        if (($WriteToLogFile) -and ($Logging))
-        {
+        if (($WriteToLogFile) -and ($Logging)) {
             Add-Content -Path $LogFile -Value "[UNKNOWN] - $TimeStamp - $Message"
         }
     }
 }
+
+# function Convert-Size {            
+#     [cmdletbinding()]            
+#     param(            
+#         [validateset("Bytes", "KB", "MB", "GB", "TB", "PB")]            
+#         [string]$From,            
+#         [validateset("Bytes", "KB", "MB", "GB", "TB", "PB")]            
+#         [string]$To,            
+#         [Parameter(Mandatory = $true)]            
+#         [double]$Value,            
+#         [int]$Precision = 4            
+#     )            
+#     switch ($From) {            
+#         "Bytes" { $value = $Value }            
+#         "KB" { $value = $Value * 1024 }            
+#         "MB" { $value = $Value * 1024 * 1024 }            
+#         "GB" { $value = $Value * 1024 * 1024 * 1024 }            
+#         "TB" { $value = $Value * 1024 * 1024 * 1024 * 1024 }            
+#         "PB" { $value = $value * 1024 * 1024 * 1024 * 1024 * 1024}
+#     }            
+                
+#     switch ($To) {            
+#         "Bytes" { return $value }            
+#         "KB" { $Value = $Value / 1KB }            
+#         "MB" { $Value = $Value / 1MB }            
+#         "GB" { $Value = $Value / 1GB }            
+#         "TB" { $Value = $Value / 1TB }            
+#         "PB" { $Value = $Value / 1PB }     
+                
+#     }            
+                
+#     return [Math]::Round($value, $Precision, [MidPointRounding]::AwayFromZero)            
+                
+# }
 
 # Convert Volume Size to KB/MB/GB/TB
 Function sConvert-Size {
 
     param (
  
-	# Disk or Volume Space
-	[Parameter(Mandatory = $false)]
-	$DiskVolumeSpace,
+        # Disk or Volume Space
+        [Parameter(Mandatory = $false)]
+        $DiskVolumeSpace,
 
-	# Disk or Volume Space Input Unit
-	[Parameter(Mandatory = $true)]
-	[string]$DiskVolumeSpaceUnit
+        # Disk or Volume Space Input Unit
+        [Parameter(Mandatory = $true)]
+        [string]$DiskVolumeSpaceUnit
  
     )
 
-    if ($DiskVolumeSpaceUnit -eq "byte") # byte input
-    {
-        if (($DiskVolumeSpace -ge "1024") -and ($DiskVolumeSpace -lt "1048576"))
-        {
-            $DiskVolumeSpace =  [math]::round(($DiskVolumeSpace/1024))
+    if ($DiskVolumeSpaceUnit -eq "byte") { # byte input
+        if (($DiskVolumeSpace -ge "1024") -and ($DiskVolumeSpace -lt "1048576")) {
+            $DiskVolumeSpace = [math]::round(($DiskVolumeSpace / 1024))
             $DiskVolumeSpaceUnit = "KB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1048576") -and ($DiskVolumeSpace -lt "1073741824"))
-        {
-            $DiskVolumeSpace =  [math]::round(($DiskVolumeSpace/1024/1024))
+        elseif (($DiskVolumeSpace -ge "1048576") -and ($DiskVolumeSpace -lt "1073741824")) {
+            $DiskVolumeSpace = [math]::round(($DiskVolumeSpace / 1024 / 1024))
 
             $DiskVolumeSpaceUnit = "MB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1073741824") -and ($DiskVolumeSpace -lt "1099511627776"))
-        {
-            $DiskVolumeSpace =  "{0:N1}" -f ($DiskVolumeSpace/1024/1024/1024)
+        elseif (($DiskVolumeSpace -ge "1073741824") -and ($DiskVolumeSpace -lt "1099511627776")) {
+            $DiskVolumeSpace = "{0:N1}" -f ($DiskVolumeSpace / 1024 / 1024 / 1024)
             $DiskVolumeSpaceUnit = "GB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1099511627776") -and ($DiskVolumeSpace -lt "1125899906842624"))
-        {
-            $DiskVolumeSpace =  "{0:N2}" -f ($DiskVolumeSpace/1024/1024/1024/1024)
+        elseif (($DiskVolumeSpace -ge "1099511627776") -and ($DiskVolumeSpace -lt "1125899906842624")) {
+            $DiskVolumeSpace = "{0:N2}" -f ($DiskVolumeSpace / 1024 / 1024 / 1024 / 1024)
             $DiskVolumeSpaceUnit = "TB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif ($null -eq $DiskVolumeSpace)
-        {
-            $DiskVolumeSpace =  "N/A"
+        elseif ($null -eq $DiskVolumeSpace) {
+            $DiskVolumeSpace = "N/A"
             $DiskVolumeSpaceUnit = "-"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        else
-        {
-            $DiskVolumeSpace =  $DiskVolumeSpace
+        else {
+            $DiskVolumeSpace = $DiskVolumeSpace
             $DiskVolumeSpaceUnit = "Byte"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }    
     }
-    elseif ($DiskVolumeSpaceUnit -eq "kb") # kb input
-    {
-        if (($DiskVolumeSpace -ge "1") -and ($DiskVolumeSpace -lt "1024"))
-        {
-            $DiskVolumeSpace =  $DiskVolumeSpace
+    elseif ($DiskVolumeSpaceUnit -eq "kb") { # kb input
+        if (($DiskVolumeSpace -ge "1") -and ($DiskVolumeSpace -lt "1024")) {
+            $DiskVolumeSpace = $DiskVolumeSpace
             $DiskVolumeSpaceUnit = "KB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1024") -and ($DiskVolumeSpace -lt "1048576"))
-        {
-            $DiskVolumeSpace =  ($DiskVolumeSpace/1024)
+        elseif (($DiskVolumeSpace -ge "1024") -and ($DiskVolumeSpace -lt "1048576")) {
+            $DiskVolumeSpace = ($DiskVolumeSpace / 1024)
             $DiskVolumeSpaceUnit = "MB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1048576") -and ($DiskVolumeSpace -lt "1073741824"))
-        {
-            $DiskVolumeSpace =  "{0:N1}" -f ($DiskVolumeSpace/1024/1024)
+        elseif (($DiskVolumeSpace -ge "1048576") -and ($DiskVolumeSpace -lt "1073741824")) {
+            $DiskVolumeSpace = "{0:N1}" -f ($DiskVolumeSpace / 1024 / 1024)
             $DiskVolumeSpaceUnit = "GB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1073741824") -and ($DiskVolumeSpace -lt "1099511627776"))
-        {
-            $DiskVolumeSpace =  "{0:N2}" -f ($DiskVolumeSpace/1024/1024/1024)
+        elseif (($DiskVolumeSpace -ge "1073741824") -and ($DiskVolumeSpace -lt "1099511627776")) {
+            $DiskVolumeSpace = "{0:N2}" -f ($DiskVolumeSpace / 1024 / 1024 / 1024)
             $DiskVolumeSpaceUnit = "TB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif ($DiskVolumeSpace -eq $null)
-        {
-            $DiskVolumeSpace =  "N/A"
+        elseif ($null -eq $DiskVolumeSpace) {
+            $DiskVolumeSpace = "N/A"
             $DiskVolumeSpaceUnit = "-"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        else
-        {
-            $DiskVolumeSpace =  $DiskVolumeSpace
+        else {
+            $DiskVolumeSpace = $DiskVolumeSpace
             $DiskVolumeSpaceUnit = "KB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }    
     }
-    elseif ($DiskVolumeSpaceUnit -eq "mb") # mb input
-    {
-        if (($DiskVolumeSpace -ge "1") -and ($DiskVolumeSpace -lt "1024"))
-        {
-            $DiskVolumeSpace =  $DiskVolumeSpace
+    elseif ($DiskVolumeSpaceUnit -eq "mb") { # mb input
+        if (($DiskVolumeSpace -ge "1") -and ($DiskVolumeSpace -lt "1024")) {
+            $DiskVolumeSpace = $DiskVolumeSpace
             $DiskVolumeSpaceUnit = "MB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1024") -and ($DiskVolumeSpace -lt "1048576"))
-        {
-            $DiskVolumeSpace =  "{0:N1}" -f ($DiskVolumeSpace/1024)
+        elseif (($DiskVolumeSpace -ge "1024") -and ($DiskVolumeSpace -lt "1048576")) {
+            $DiskVolumeSpace = "{0:N1}" -f ($DiskVolumeSpace / 1024)
             $DiskVolumeSpaceUnit = "GB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif (($DiskVolumeSpace -ge "1048576") -and ($DiskVolumeSpace -lt "1073741824"))
-        {
-            $DiskVolumeSpace =  "{0:N2}" -f ($DiskVolumeSpace/1024/1024)
+        elseif (($DiskVolumeSpace -ge "1048576") -and ($DiskVolumeSpace -lt "1073741824")) {
+            $DiskVolumeSpace = "{0:N2}" -f ($DiskVolumeSpace / 1024 / 1024)
             $DiskVolumeSpaceUnit = "TB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        elseif ($DiskVolumeSpace -eq $null)
-        {
-            $DiskVolumeSpace =  "N/A"
+        elseif ($DiskVolumeSpace -eq $null) {
+            $DiskVolumeSpace = "N/A"
             $DiskVolumeSpaceUnit = "-"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }
-        else
-        {
-            $DiskVolumeSpace =  $DiskVolumeSpace
+        else {
+            $DiskVolumeSpace = $DiskVolumeSpace
             $DiskVolumeSpaceUnit = "MB"
             return $DiskVolumeSpace, $DiskVolumeSpaceUnit
         }    
     }
-    else
-    {
+    else {
         return "Unknown Parameter"
     }
 }
@@ -622,24 +627,24 @@ Function sConvert-BusTypeName {
     
     Param ([Byte] $BusTypeValue)
     
-    if ($BusTypeValue -eq 1){$Result = "SCSI"}
-    elseif ($busTypeValue -eq 2){$Result = "ATAPI"}
-    elseif ($busTypeValue -eq 3){$Result = "ATA"}
-    elseif ($busTypeValue -eq 4){$Result = "IEEE 1394"}
-    elseif ($busTypeValue -eq 5){$Result = "SSA"}
-    elseif ($busTypeValue -eq 6){$Result = "FC"}
-    elseif ($busTypeValue -eq 7){$Result = "USB"}
-    elseif ($busTypeValue -eq 8){$Result = "RAID"}
-    elseif ($busTypeValue -eq 9){$Result = "iSCSI"}
-    elseif ($busTypeValue -eq 10){$Result = "SAS"}
-    elseif ($busTypeValue -eq 11){$Result = "SATA"}
-    elseif ($busTypeValue -eq 12){$Result = "SD"}
-    elseif ($busTypeValue -eq 13){$Result = "SAS"}
-    elseif ($busTypeValue -eq 14){$Result = "Virtual"}
-    elseif ($busTypeValue -eq 15){$Result = "FB Virtual"}
-    elseif ($busTypeValue -eq 16){$Result = "Storage Spaces"}
-    elseif ($busTypeValue -eq 17){$Result = "NVMe"}
-    else {$Result = "Unknown"}
+    if ($BusTypeValue -eq 1) { $Result = "SCSI" }
+    elseif ($busTypeValue -eq 2) { $Result = "ATAPI" }
+    elseif ($busTypeValue -eq 3) { $Result = "ATA" }
+    elseif ($busTypeValue -eq 4) { $Result = "IEEE 1394" }
+    elseif ($busTypeValue -eq 5) { $Result = "SSA" }
+    elseif ($busTypeValue -eq 6) { $Result = "FC" }
+    elseif ($busTypeValue -eq 7) { $Result = "USB" }
+    elseif ($busTypeValue -eq 8) { $Result = "RAID" }
+    elseif ($busTypeValue -eq 9) { $Result = "iSCSI" }
+    elseif ($busTypeValue -eq 10) { $Result = "SAS" }
+    elseif ($busTypeValue -eq 11) { $Result = "SATA" }
+    elseif ($busTypeValue -eq 12) { $Result = "SD" }
+    elseif ($busTypeValue -eq 13) { $Result = "SAS" }
+    elseif ($busTypeValue -eq 14) { $Result = "Virtual" }
+    elseif ($busTypeValue -eq 15) { $Result = "FB Virtual" }
+    elseif ($busTypeValue -eq 16) { $Result = "Storage Spaces" }
+    elseif ($busTypeValue -eq 17) { $Result = "NVMe" }
+    else { $Result = "Unknown" }
 
     Return $Result
 }
@@ -649,16 +654,16 @@ Function sConvert-ClusterDiskState {
     
     Param ([Byte] $StateValue)
 
-    if ($StateValue -eq 0){$Result = "Inherited",$stateBgColors[5],$stateWordColors[5]}
-    elseif ($StateValue -eq 1){$Result = "Initializing",$stateBgColors[4],$stateWordColors[4]}
-    elseif ($StateValue -eq 2){$Result = "Online",$stateBgColors[1],$stateWordColors[1]}
-    elseif ($StateValue -eq 3){$Result = "Offline",$stateBgColors[2],$stateWordColors[2]}
-    elseif ($StateValue -eq 4){$Result = "Failed",$stateBgColors[3],$stateWordColors[3]}
-    elseif ($StateValue -eq 127){$Result = "Offline",$stateBgColors[2],$stateWordColors[2]}
-    elseif ($StateValue -eq 128){$Result = "Pending",$stateBgColors[4],$stateWordColors[4]}
-    elseif ($StateValue -eq 129){$Result = "Online Pending",$stateBgColors[4],$stateWordColors[4]}
-    elseif ($StateValue -eq 130){$Result = "Offline Pending",$stateBgColors[4],$stateWordColors[4]}  
-    else {$Result = "Unknown",$stateBgColors[5],$stateWordColors[5]} # Including "-1" state
+    if ($StateValue -eq 0) { $Result = "Inherited", $stateBgColors[5], $stateWordColors[5] }
+    elseif ($StateValue -eq 1) { $Result = "Initializing", $stateBgColors[4], $stateWordColors[4] }
+    elseif ($StateValue -eq 2) { $Result = "Online", $stateBgColors[1], $stateWordColors[1] }
+    elseif ($StateValue -eq 3) { $Result = "Offline", $stateBgColors[2], $stateWordColors[2] }
+    elseif ($StateValue -eq 4) { $Result = "Failed", $stateBgColors[3], $stateWordColors[3] }
+    elseif ($StateValue -eq 127) { $Result = "Offline", $stateBgColors[2], $stateWordColors[2] }
+    elseif ($StateValue -eq 128) { $Result = "Pending", $stateBgColors[4], $stateWordColors[4] }
+    elseif ($StateValue -eq 129) { $Result = "Online Pending", $stateBgColors[4], $stateWordColors[4] }
+    elseif ($StateValue -eq 130) { $Result = "Offline Pending", $stateBgColors[4], $stateWordColors[4] }  
+    else { $Result = "Unknown", $stateBgColors[5], $stateWordColors[5] } # Including "-1" state
 
     Return $Result
 }
@@ -668,16 +673,13 @@ Function sConvert-DiskPartitionStyle {
     
     Param ([Byte] $PartitionStyleValue)
     
-    if ($PartitionStyleValue -eq 1)
-    {
+    if ($PartitionStyleValue -eq 1) {
         $Result = "MBR"
     }
-    elseif ($PartitionStyleValue -eq 2)
-    {
+    elseif ($PartitionStyleValue -eq 2) {
         $Result = "GPT"
     }
-    else 
-    {
+    else {
         $Result = "Unknown"
     }
 
@@ -689,17 +691,14 @@ Function sConvert-VolumeSizeColors {
 
     Param ([Byte] $FreePercent)
 
-    if (($FreePercent -le 10) -and ($FreePercent -gt 5))
-    {
-        $Result = $stateBgColors[4],$stateBgColors[4],$stateWordColors[4]
+    if (($FreePercent -le 10) -and ($FreePercent -gt 5)) {
+        $Result = $stateBgColors[4], $stateBgColors[4], $stateWordColors[4]
     }
-    elseif ($FreePercent -le 5)
-    {
-        $Result = $stateBgColors[3],$stateBgColors[3],$stateWordColors[3]
+    elseif ($FreePercent -le 5) {
+        $Result = $stateBgColors[3], $stateBgColors[3], $stateWordColors[3]
     }
-    else
-    {
-        $Result = $stateBgColors[0],$stateBgColors[0],"#BDBDBD"
+    else {
+        $Result = $stateBgColors[0], $stateBgColors[0], "#BDBDBD"
     }
 
     Return $Result
@@ -710,29 +709,27 @@ Function sConvert-VolumeSizeColors {
 #region Variables
 #----------------
 
-$debug = $true
+$debug = $false
 
 # Print MSG
 sPrint -Type 1 -Message "Started! Hyper-V Reporting Script (Version 1.6)"
 Start-Sleep -Seconds 3
 
 # State Colors
-[array]$stateBgColors = "", "#ACFA58","#E6E6E6","#FB7171","#FBD95B","#BDD7EE" #0-Null, 1-Online(green), 2-Offline(grey), 3-Failed/Critical(red), 4-Warning(orange), 5-Other(blue)
-[array]$stateWordColors = "", "#298A08","#848484","#A40000","#9C6500","#204F7A","#FFFFFF" #0-Null, 1-Online(green), 2-Offline(grey), 3-Failed/Critical(red), 4-Warning(orange), 5-Other(blue), 6-White
+[array]$stateBgColors = "", "#ACFA58", "#E6E6E6", "#FB7171", "#FBD95B", "#BDD7EE" #0-Null, 1-Online(green), 2-Offline(grey), 3-Failed/Critical(red), 4-Warning(orange), 5-Other(blue)
+[array]$stateWordColors = "", "#298A08", "#848484", "#A40000", "#9C6500", "#204F7A", "#FFFFFF" #0-Null, 1-Online(green), 2-Offline(grey), 3-Failed/Critical(red), 4-Warning(orange), 5-Other(blue), 6-White
 
 # Date and Time
 $Date = Get-Date -Format d/MMM/yyyy
-$Time = Get-Date -Format "hh:mm:ss tt"
+$Time = Get-Date -Format "HH:mm:ss"
 
 # Log and report file/folder
-$FileTimeSuffix = ((Get-Date -Format dMMMyy).ToString()) + "-" + ((get-date -Format hhmmsstt).ToString())
+$FileTimeSuffix = ((Get-Date -Format dMMMyy).ToString()) + "-" + ((get-date -Format HHmm).ToString())
 
-if ($ReportFileNameTimeStamp)
-{
+if ($ReportFileNameTimeStamp) {
     $ReportFile = $ReportFilePath + "\" + $ReportFileNamePrefix + "-" + $FileTimeSuffix + ".html"
 }
-else
-{
+else {
     $ReportFile = $ReportFilePath + "\" + $ReportFileNamePrefix + ".html"
 }
 
@@ -743,8 +740,7 @@ $LogFile = $ReportFilePath + "\" + "ScriptLog" + ".txt"
 
 # HighlightsOnly Mode String
 $hlString = $null
-if ($HighlightsOnly)
-{
+if ($HighlightsOnly) {
     $hlString = "<center><span style=""padding-top:1px;padding-bottom:1px;font-size:12px;background-color:#FBD95B;color:#FFFFFF"">&nbsp;(HighlightsOnly Mode)&nbsp;</span></center>"
     sPrint -Type 1 -Message "HighlightsOnly mode is enabled." -WriteToLogFile $True
 }
@@ -760,15 +756,13 @@ if (!(Test-Path -Path $LogFile)) {
 
     New-Item -Path $LogFile -ItemType file -Force -ErrorAction SilentlyContinue | Out-Null
     
-    if (Test-Path -Path $LogFile)
-    {
+    if (Test-Path -Path $LogFile) {
         sPrint -Type 6 -WriteToLogFile $true
         sPrint -Type 5 -Message "----- Start -----" -WriteToLogFile $true
         sPrint -Type 1 -Message "Logging started: $LogFile" -WriteToLogFile $True
         Start-Sleep -Seconds 3
     }
-    else
-    {
+    else {
         $Logging = $false
         sPrint -Type 2 -Message "Unable to create the log file. Script will continue without logging..."
         Start-Sleep -Seconds 3
@@ -802,135 +796,112 @@ if (($VMHost) -and ($Cluster)) {
 sPrint -Type 1 -Message "Checking prerequisites to run script on the $($env:COMPUTERNAME.ToUpper())..." -WriteToLogFile $True
 $osVersion = $null
 $osName = $null
-$osVersion = sGet-Wmi -ComputerName $env:COMPUTERNAME -Namespace root\Cimv2 -Class Win32_OperatingSystem -Property Version,Caption
+$osVersion = Get-WmiExt -ComputerName $env:COMPUTERNAME -Namespace root\Cimv2 -Class Win32_OperatingSystem -Property Version, Caption
     
-    if ($osVersion[1] -eq 1)
-    {
-        $osName = $osVersion[0].Caption
-        $osVersion = $osVersion[0].Version
-    }
-    else
-    {
-        sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): $($osVersion[0])" -WriteToLogFile $True
-        sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
-        Break
-    }
+if ($osVersion[1] -eq 1) {
+    $osName = $osVersion[0].Caption
+    $osVersion = $osVersion[0].Version
+}
+else {
+    sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): $($osVersion[0])" -WriteToLogFile $True
+    sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
+    Break
+}
 
-    if ($osVersion)
-    {
-        if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*") -or ($osVersion -like "10.*"))
-        {
-            if (($osName -like "Microsoft Windows 8*") -or ($osName -like "Microsoft Windows 10*"))
-            {
-                sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Operating system is supported as script runtime environment." -WriteToLogFile $True
+if ($osVersion) {
+    if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*") -or ($osVersion -like "10.*")) {
+        if (($osName -like "Microsoft Windows 8*") -or ($osName -like "Microsoft Windows 10*")) {
+            sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Operating system is supported as script runtime environment." -WriteToLogFile $True
 
-                # Check Hyper-V PowerShell
-                if ((Get-WindowsOptionalFeature -FeatureName Microsoft-Hyper-V-Management-PowerShell -Online).State -eq "Enabled")
-                {
-                    sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is OK." -WriteToLogFile $True
+            # Check Hyper-V PowerShell
+            if ((Get-WindowsOptionalFeature -FeatureName Microsoft-Hyper-V-Management-PowerShell -Online).State -eq "Enabled") {
+                sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is OK." -WriteToLogFile $True
+            }
+            else {
+                sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is not found. Please enable manually and run this script again. You can use `"Turn Windows features on or off`" to enable `"Hyper-V Module for Windows PowerShell`"." -WriteToLogFile $True
+                sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
+                Break
+            }
+
+            # Check Failover Cluster PowerShell
+            if ($Cluster) {
+                if (($osName -like "Microsoft Windows 10*") -or (Get-Hotfix -ID KB2693643 -ErrorAction SilentlyContinue)) {
+                    if ((Get-WindowsOptionalFeature -FeatureName RemoteServerAdministrationTools-Features-Clustering -Online).State -eq "Enabled") {
+                        sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
+                    }
+                    elseif (Get-Module -ListAvailable FailoverClusters) {
+                        sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
+                    }
+                    else {
+                        sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is not found. Please enable manually and run this script again. You can use `"Turn Windows features on or off`" to enable `"Failover Clustering Tools`"." -WriteToLogFile $True
+                        sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
+                        Break
+                    }
                 }
-                else
-                {
-                    sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is not found. Please enable manually and run this script again. You can use `"Turn Windows features on or off`" to enable `"Hyper-V Module for Windows PowerShell`"." -WriteToLogFile $True
+                else {
+                    sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Remote Server Administration Tools (RSAT) is not found. Please download (KB2693643) and install manually and run this script again." -WriteToLogFile $True
                     sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
                     Break
                 }
+            }
+        }
+        else {
+            sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Operating system is supported as script runtime environment." -WriteToLogFile $True
 
-                # Check Failover Cluster PowerShell
-                if ($Cluster)
-                {
-                    if (($osName -like "Microsoft Windows 10*") -or (Get-Hotfix -ID KB2693643 -ErrorAction SilentlyContinue))
-                    {
-                        if ((Get-WindowsOptionalFeature -FeatureName RemoteServerAdministrationTools-Features-Clustering -Online).State -eq "Enabled")
-                        {
-                            sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
-                        } elseif (Get-Module -ListAvailable FailoverClusters) {
-                            sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
-                        }
-                        else
-                        {
-                            sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is not found. Please enable manually and run this script again. You can use `"Turn Windows features on or off`" to enable `"Failover Clustering Tools`"." -WriteToLogFile $True
-                            sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
-                            Break
-                        }
-                    }
-                    else
-                    {
-                        sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Remote Server Administration Tools (RSAT) is not found. Please download (KB2693643) and install manually and run this script again." -WriteToLogFile $True
-                        sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
-                        Break
-                    }
+            # Check Hyper-V PowerShell
+            if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "Hyper-V-PowerShell").Installed) {
+                sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is OK." -WriteToLogFile $True
+            }
+            else {
+                sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is not found." -WriteToLogFile $True
+                sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Installing Hyper-V PowerShell Module... " -WriteToLogFile $True
+                Start-Sleep -Seconds 3
+                #Add-WindowsFeature -Name "Hyper-V-PowerShell" -ErrorAction SilentlyContinue | Out-Null
+
+                if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "Hyper-V-PowerShell").Installed) {
+                    sPrint -Type 1 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is OK." -WriteToLogFile $True
+                }
+                else {
+                    sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module could not be installed. Please install it manually." -WriteToLogFile $True
+                    sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
+                    Break
                 }
             }
-            else
-            {
-                sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Operating system is supported as script runtime environment." -WriteToLogFile $True
-
-                # Check Hyper-V PowerShell
-                if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "Hyper-V-PowerShell").Installed)
-                {
-                    sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is OK." -WriteToLogFile $True
-                }
-                else
-                {
-                    sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is not found." -WriteToLogFile $True
-                    sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Installing Hyper-V PowerShell Module... " -WriteToLogFile $True
-                    Start-Sleep -Seconds 3
-                    #Add-WindowsFeature -Name "Hyper-V-PowerShell" -ErrorAction SilentlyContinue | Out-Null
-
-                    if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "Hyper-V-PowerShell").Installed)
-                    {
-                        sPrint -Type 1 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module is OK." -WriteToLogFile $True
-                    }
-                    else
-                    {
-                        sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Hyper-V PowerShell Module could not be installed. Please install it manually." -WriteToLogFile $True
-                        sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
-                        Break
-                    }
-                }
             
-                # Check Failover Cluster PowerShell
-                if ($Cluster)
-                {
-                    if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "RSAT-Clustering-PowerShell").Installed)
-                    {
-                        sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
-                    }
-                    else
-                    {
-                        sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is not found." -WriteToLogFile $True
-                        sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Installing Failover Clustering PowerShell Module..." -WriteToLogFile $True
-                        Start-Sleep -Seconds 3
-                        #Add-WindowsFeature -Name "RSAT-Clustering-PowerShell" | Out-Null
+            # Check Failover Cluster PowerShell
+            if ($Cluster) {
+                if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "RSAT-Clustering-PowerShell").Installed) {
+                    sPrint -Type 5 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
+                }
+                else {
+                    sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is not found." -WriteToLogFile $True
+                    sPrint -Type 2 -Message "$($env:COMPUTERNAME.ToUpper()): Installing Failover Clustering PowerShell Module..." -WriteToLogFile $True
+                    Start-Sleep -Seconds 3
+                    #Add-WindowsFeature -Name "RSAT-Clustering-PowerShell" | Out-Null
 
-                        if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "RSAT-Clustering-PowerShell").Installed)
-                        {
-                            sPrint -Type 1 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
-                        }
-                        else
-                        {
-                            sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module could not be installed. Please install it manually." -WriteToLogFile $True
-                            sPrint -Type 0 -Message "Script terminated!"
-                            Break
-                        }
+                    if ((Get-WindowsFeature -ComputerName $env:COMPUTERNAME -Name "RSAT-Clustering-PowerShell").Installed) {
+                        sPrint -Type 1 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module is OK." -WriteToLogFile $True
+                    }
+                    else {
+                        sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Failover Clustering PowerShell Module could not be installed. Please install it manually." -WriteToLogFile $True
+                        sPrint -Type 0 -Message "Script terminated!"
+                        Break
                     }
                 }
             }
         }
-        else
-        {
-            sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Incompatible operating system version detected. Supported operating systems are Windows Server 2012 and Windows Server 2012 R2." -WriteToLogFile $True
-            sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
-            Break
-        }    
     }
-    else
-    {
-        sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Could not detect operating system version." -WriteToLogFile $True
+    else {
+        sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Incompatible operating system version detected. Supported operating systems are Windows Server 2012 and Windows Server 2012 R2." -WriteToLogFile $True
         sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
         Break
-    }
+    }    
+}
+else {
+    sPrint -Type 0 -Message "$($env:COMPUTERNAME.ToUpper()): Could not detect operating system version." -WriteToLogFile $True
+    sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
+    Break
+}
 
 # Special Thanks to Serhat Akinci
 	
@@ -947,7 +918,7 @@ $ClusterName = $null
 $outHtmlStart = "<!DOCTYPE html>
 <html>
 <head>
-<title>ghostinthewires Internal Hyper-V Environment Report</title>
+<title>Internal Hyper-V Environment Report</title>
 <style>
 /*Reset CSS*/
 html, body, div, span, applet, object, iframe, h1, h2, h3, h4, h5, h6, p, blockquote, pre, a, abbr, acronym, address, big, cite, code, del, dfn, em, img, ins, kbd, q, s, samp,
@@ -1092,7 +1063,7 @@ th {
 </head>
 <body>
 <br><br>
-<center><h1>ghostinthewires Internal Hyper-V Environment Hourly Report</h1></center>
+<center><h1>Internal Hyper-V Environment Report</h1></center>
 <center><font face=""Verdana,sans-serif"" size=""3"" color=""#222222"">Generated on $($Date) at $($Time)</font></center>
 $($hlString)
 <br>
@@ -1105,19 +1076,16 @@ $($hlString)
     
 if ($Cluster) {
     
-    if (($Cluster -eq "localhost") -or ($Cluster -eq "127.0.0.1"))
-    {
+    if (($Cluster -eq "localhost") -or ($Cluster -eq "127.0.0.1")) {
         $ClusterName = $env:COMPUTERNAME
     }
-    else
-    {
+    else {
         $ClusterName = $Cluster
     }
     
     $ClusterNodes = $null
 
-    if (Get-Cluster -Name $ClusterName -ErrorAction SilentlyContinue)
-    {
+    if (Get-Cluster -Name $ClusterName -ErrorAction SilentlyContinue) {
         $ClusterName = (Get-Cluster -Name $ClusterName).Name
         $hostTableCaption = "Cluster Nodes"
         $volumeTableCaption = "Clustered Disks/Volumes"
@@ -1128,27 +1096,23 @@ if ($Cluster) {
         sPrint -Type 1 -Message "Checking prerequisites for Hyper-V Cluster reporting..." -WriteToLogFile $True
         Start-Sleep -Seconds 3
 
-        $clusterNodesData = Get-ClusterNode -Cluster $ClusterName -ErrorAction SilentlyContinue | select Name,State
-        $ClusterNodes = ($clusterNodesData | where{$_.State -ne "Down"}).Name
-        $downClusterNodes = ($clusterNodesData | where{$_.State -eq "Down"}).Name
+        $clusterNodesData = Get-ClusterNode -Cluster $ClusterName -ErrorAction SilentlyContinue | Select-Object Name, State
+        $ClusterNodes = ($clusterNodesData | Where-Object { $_.State -ne "Down" }).Name
+        $downClusterNodes = ($clusterNodesData | Where-Object { $_.State -eq "Down" }).Name
         $ovTotalNode = ($clusterNodesData).Count
 
-        if ($downClusterNodes)
-        {
+        if ($downClusterNodes) {
             sPrint -Type 0 "Unavailable or down Hyper-V Cluster Node(s): $downClusterNodes" -WriteToLogFile $True
             Start-Sleep -Seconds 3
         }
 
-        if ($ClusterNodes)
-        {
+        if ($ClusterNodes) {
             # Checking Cluster Owner Node OS version and Hyper-V role
-            $clusterOwnerHostName = sGet-Wmi -ComputerName $ClusterName -Namespace root\Cimv2 -Class  Win32_ComputerSystem -Property Name
-            if ($clusterOwnerHostName[1] -eq 1)
-            {
+            $clusterOwnerHostName = Get-WmiExt -ComputerName $ClusterName -Namespace root\Cimv2 -Class  Win32_ComputerSystem -Property Name
+            if ($clusterOwnerHostName[1] -eq 1) {
                 $clusterOwnerHostName = $clusterOwnerHostName[0].Name
             }
-            else
-            {
+            else {
                 sPrint -Type 0 -Message "$ClusterName`: $($clusterOwnerHostName[0])" -WriteToLogFile $True
                 sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
                 Break
@@ -1157,10 +1121,8 @@ if ($Cluster) {
             $osVersion = $null
             $getClusterOwnerNode = Get-ClusterNode -Cluster $ClusterName -Name $clusterOwnerHostName
             $osVersion = ($getClusterOwnerNode.MajorVersion).ToString() + "." + ($getClusterOwnerNode.MinorVersion).ToString()
-            if (($osVersion -like "6.2") -or ($osVersion -like "6.3") -or ($osVersion -like "10.*"))
-            {
-                if ((Get-WindowsFeature -ComputerName $clusterOwnerHostName -Name "Hyper-V").Installed)
-                {
+            if (($osVersion -like "6.2") -or ($osVersion -like "6.3") -or ($osVersion -like "10.*")) {
+                if ((Get-WindowsFeature -ComputerName $clusterOwnerHostName -Name "Hyper-V").Installed) {
                     sPrint -Type 5 -Message "Operating system version and Hyper-V role on the cluster owner node is OK." -WriteToLogFile $True
                     $VMHosts = $ClusterNodes
 
@@ -1172,34 +1134,30 @@ if ($Cluster) {
                     $clusterResourceData = Get-ClusterResource -Cluster $ClusterName
 
                     # Detect offline Virtual Machine Configuration resources
-                    $offlineVmConfigData = $clusterResourceData | where{($_.ResourceType -eq "Virtual Machine Configuration") -and ($_.State -ne "Online")}
+                    $offlineVmConfigData = $clusterResourceData | Where-Object { ($_.ResourceType -eq "Virtual Machine Configuration") -and ($_.State -ne "Online") }
 
                     # For Cluster Overview
-                    $ovTotalVm = ($clusterResourceData | where{$_.ResourceType -eq "Virtual Machine"}).Count
+                    $ovTotalVm = ($clusterResourceData | Where-Object { $_.ResourceType -eq "Virtual Machine" }).Count
                 }
-                else
-                {
+                else {
                     sPrint -Type 2 -Message "Hyper-V role is not installed on $clusterOwnerHostName." -WriteToLogFile $True
                     sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
                     Break
                 }
             }
-            else
-            {
+            else {
                 sPrint -Type 2 -Message "$($ClusterName.ToUpper()): Incompatible operating system version detected. Supported operating systems are Windows Server 2012 and Windows Server 2012 R2." -WriteToLogFile $True
                 sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
                 Break
             }
         }
-        else
-        {
+        else {
             sPrint -Type 0 -Message "$ClusterName`: $($error[0].Exception.Message)" -WriteToLogFile $True
             sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
             Break
         }
     }
-    else
-    {
+    else {
         sPrint -Type 0 -Message "$($ClusterName.ToUpper()): $($error[0].Exception.Message)" -WriteToLogFile $True
         sPrint -Type 0 -Message "Script terminated!" -WriteToLogFile $True
         Break
@@ -1208,12 +1166,10 @@ if ($Cluster) {
     
 if ($VMHost) {
 
-    if (($Cluster -eq "localhost") -or ($Cluster -eq "127.0.0.1"))
-    {
+    if (($Cluster -eq "localhost") -or ($Cluster -eq "127.0.0.1")) {
         $Computers = $env:COMPUTERNAME
     }
-    else
-    {
+    else {
         $Computers = $VMHost | Sort-Object -Unique
     }
 
@@ -1225,17 +1181,14 @@ if ($VMHost) {
     sPrint -Type 1 -Message "Checking prerequisites for standalone Hyper-V host(s) reporting..." -WriteToLogFile $True
     Start-Sleep -Seconds 3
 
-    foreach ($ComputerName in $Computers)
-    {
+    foreach ($ComputerName in $Computers) {
         $osVersion = $null
-        $osVersion = sGet-Wmi -ComputerName $ComputerName -Namespace root\Cimv2 -Class Win32_OperatingSystem -Property Version
+        $osVersion = Get-WmiExt -ComputerName $ComputerName -Namespace root\Cimv2 -Class Win32_OperatingSystem -Property Version
         
-        if ($osVersion[1] -eq 1)
-        {
+        if ($osVersion[1] -eq 1) {
             $osVersion = $osVersion[0].Version
         }
-        else
-        {
+        else {
             sPrint -Type 0 -Message "$($ComputerName.ToUpper()): $($osVersion[0])" -WriteToLogFile $True
             Start-Sleep -Seconds 3
             $invalidVmHost += $ComputerName
@@ -1243,41 +1196,33 @@ if ($VMHost) {
             Continue
         }
 
-        if ($OsVersion)
-        {
-            if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*") -or ($OsVersion -like "10.*"))
-            {
-                if ((Get-WindowsFeature -ComputerName $ComputerName -Name "Hyper-V").Installed)
-                {
-                    $checkClusterMember = sGet-Wmi -ComputerName $ComputerName -Namespace root\MSCluster -Class MSCluster_Cluster -Property Name
-                    if ($checkClusterMember[1] -eq 1)
-                    {
+        if ($OsVersion) {
+            if (($OsVersion -like "6.2*") -or ($OsVersion -like "6.3*") -or ($OsVersion -like "10.*")) {
+                if ((Get-WindowsFeature -ComputerName $ComputerName -Name "Hyper-V").Installed) {
+                    $checkClusterMember = Get-WmiExt -ComputerName $ComputerName -Namespace root\MSCluster -Class MSCluster_Cluster -Property Name
+                    if ($checkClusterMember[1] -eq 1) {
                         sPrint -Type 0 -Message "$($ComputerName.ToUpper()) is a member of a Hyper-V Cluster and didn't included in the VMHost list. Please use -Cluster parameter to report this node." -WriteToLogFile $True
                         $invalidVmHost += $ComputerName
                         $invalidVmHostMsg += "This Node is a member of a cluster. Please use -Cluster parameter to report this node."
                     }
-                    else
-                    {
+                    else {
                         sPrint -Type 5 -Message "$($ComputerName.ToUpper()): Operating system version and Hyper-V role is OK." -WriteToLogFile $True
                         $VMHosts += $ComputerName
                     }
                 }
-                else
-                {
+                else {
                     sPrint -Type 0 -Message "$($ComputerName.ToUpper()): Could not be added to the VMHost list because Hyper-V role is not installed." -WriteToLogFile $True
                     $invalidVmHost += $ComputerName
                     $invalidVmHostMsg += "Could not be added to the VMHost list because Hyper-V role is not installed"
                 }
             }
-            else
-            {
+            else {
                 sPrint -Type 0 -Message "$($ComputerName.ToUpper()): Could not be added to the VMHost list because incompatible operating system version detected." -WriteToLogFile $True
                 $invalidVmHost += $ComputerName
                 $invalidVmHostMsg += "Could not be added to the VMHost list because incompatible operating system version detected"
             }            
         }
-        else
-        {
+        else {
             sPrint -Type 0 -Message "$($ComputerName.ToUpper()): Could not be added to the VMHost list because operating system version could not be detected." -WriteToLogFile $True
             $invalidVmHost += $ComputerName
             $invalidVmHostMsg += "Could not be added to the VMHost list because operating system version could not be detected"
@@ -1293,13 +1238,11 @@ if (!$VMHosts) {
 }
 else {
     
-    if ($Cluster)
-    {
+    if ($Cluster) {
         sPrint -Type 1 "Available Hyper-V Cluster Node(s) for reporting: $VMHosts" -WriteToLogFile $True
         Start-Sleep -Seconds 3
     }
-    else
-    {
+    else {
         sPrint -Type 1 "Available Hyper-V server(s) for reporting: $VMHosts" -WriteToLogFile $True
         Start-Sleep -Seconds 3
     }
@@ -1309,7 +1252,7 @@ else {
 sPrint -Type 1 "Gathering Hyper-V Host information..." -WriteToLogFile $True
 
 # VMHosts-Table Header
-    $outVMHostTableStart ="
+$outVMHostTableStart = "
     <div class=""VMHosts""><!--Start VMHosts Class-->
         <h2>$($hostTableCaption)</h2><br>
         <table id=""VMHosts-Table"">
@@ -1339,51 +1282,44 @@ foreach ($vmHostItem in $vmHosts) {
     $vmHostData = $null
     $vmHostTotalVProc = 0
     $vmHostVpLpRatio = 0
-    $vmHostRunningClusVmCount= 0
+    $vmHostRunningClusVmCount = 0
     $vmHostGet = Get-VMHost -ComputerName $vmHostItem
     $vmHostVMs = Get-VM -ComputerName $vmHostItem
-    $vmHostVmCount = $vmHostVMs.Count + ($offlineVmConfigData | where{$_.OwnerNode -eq "$vmHostItem"}).Count
-    $vmHostRunningVmCount = ($vmHostVMs | where{$_.State -eq "Running"}).Count
-    $vmHostRunningClusVmCount = ($vmHostVMs | where{($_.IsClustered -eq $true) -and ($_.State -eq "Running")}).Count
+    $vmHostVmCount = $vmHostVMs.Count + ($offlineVmConfigData | Where-Object { $_.OwnerNode -eq "$vmHostItem" }).Count
+    $vmHostRunningVmCount = ($vmHostVMs | Where-Object { $_.State -eq "Running" }).Count
+    $vmHostRunningClusVmCount = ($vmHostVMs | Where-Object { ($_.IsClustered -eq $true) -and ($_.State -eq "Running") }).Count
     $vmHostRunningNonClusVmCount = $vmHostRunningVmCount - $vmHostRunningClusVmCount 
-    $vmHostTotalVProc = (($vmHostVMs | where{(($_.State -eq "Running") -or ($_.State -eq "Paused"))}).ProcessorCount | Measure-Object -Sum).Sum
-    $vmHostClusVProc = (($vmHostVMs | where{(($_.State -eq "Running") -and ($_.IsClustered -eq $true)) -or (($_.State -eq "Paused") -and ($_.IsClustered -eq $true))}).ProcessorCount | Measure-Object -Sum).Sum
+    $vmHostTotalVProc = (($vmHostVMs | Where-Object { (($_.State -eq "Running") -or ($_.State -eq "Paused")) }).ProcessorCount | Measure-Object -Sum).Sum
+    $vmHostClusVProc = (($vmHostVMs | Where-Object { (($_.State -eq "Running") -and ($_.IsClustered -eq $true)) -or (($_.State -eq "Paused") -and ($_.IsClustered -eq $true)) }).ProcessorCount | Measure-Object -Sum).Sum
     $vmHostWmiData = Get-WmiObject -ComputerName $vmHostItem -Class Win32_OperatingSystem
 
     # For Cluster Overview
     $ovTotalVProc = $ovTotalVProc + $vmHostClusVProc
 
     # State
-    if ($Cluster)
-    {
+    if ($Cluster) {
         $vmHostState = (Get-ClusterNode -Cluster $ClusterName -Name $vmHostItem).State
     }
-    else
-    {
+    else {
         $vmHostState = "Up"  
     }
 
     # State Colors
-    if ($vmHostState -eq "Up")
-    {
-        $outVmHostState = "Up",$stateBgColors[1],$stateWordColors[1]
+    if ($vmHostState -eq "Up") {
+        $outVmHostState = "Up", $stateBgColors[1], $stateWordColors[1]
     }
-    elseif ($vmHostState -eq "Down")
-    {
-        $outVmHostState = "Down",$stateBgColors[3],$stateWordColors[3]
+    elseif ($vmHostState -eq "Down") {
+        $outVmHostState = "Down", $stateBgColors[3], $stateWordColors[3]
         $highL = $true
     }
-    elseif ($vmHostState -eq "Paused")
-    {
-        $outVmHostState = "Paused",$stateBgColors[2],$stateWordColors[2]
+    elseif ($vmHostState -eq "Paused") {
+        $outVmHostState = "Paused", $stateBgColors[2], $stateWordColors[2]
     }
-    elseif ($vmHostState -eq "Joining")
-    {
-        $outVmHostState = "Joining",$stateBgColors[4],$stateWordColors[4]
+    elseif ($vmHostState -eq "Joining") {
+        $outVmHostState = "Joining", $stateBgColors[4], $stateWordColors[4]
     }
-    else
-    {
-        $outVmHostState = "Unknown",$stateBgColors[5],$stateWordColors[5]
+    else {
+        $outVmHostState = "Unknown", $stateBgColors[5], $stateWordColors[5]
         $highL = $true
     }
     
@@ -1398,25 +1334,22 @@ foreach ($vmHostItem in $vmHosts) {
     $TotalUsedMemory = sConvert-Size -DiskVolumeSpace ($vmHostWmiData.TotalVisibleMemorySize - $vmHostWmiData.FreePhysicalMemory) -DiskVolumeSpaceUnit kb
     $TotalFreeMemory = sConvert-Size -DiskVolumeSpace $vmHostWmiData.FreePhysicalMemory -DiskVolumeSpaceUnit kb
     $TotalVisibleMemory = sConvert-Size -DiskVolumeSpace $vmHostWmiData.TotalVisibleMemorySize -DiskVolumeSpaceUnit kb
-    $TotalFreeMemoryPercentage = [math]::round(($vmHostWmiData.FreePhysicalMemory/$vmHostWmiData.TotalVisibleMemorySize)*100)
+    $TotalFreeMemoryPercentage = [math]::round(($vmHostWmiData.FreePhysicalMemory / $vmHostWmiData.TotalVisibleMemorySize) * 100)
 
     # Free Memory Percentage Colors
     # 0 - $totalFreeMemoryBgColor
     # 1 - $TotalFreeMemoryPercentageBgColor
     # 2 - $TotalFreeMemoryPercentageWordColor
-    if (($TotalFreeMemoryPercentage -le 10) -and ($TotalFreeMemoryPercentage -gt 5))
-    {
-        $outVmHostFreeMemoryState = $stateBgColors[4],$stateBgColors[4],$stateWordColors[4]
+    if (($TotalFreeMemoryPercentage -le 10) -and ($TotalFreeMemoryPercentage -gt 5)) {
+        $outVmHostFreeMemoryState = $stateBgColors[4], $stateBgColors[4], $stateWordColors[4]
         $highL = $true
     }
-    elseif ($TotalFreeMemoryPercentage -le 5)
-    {
-        $outVmHostFreeMemoryState = $stateBgColors[3],$stateBgColors[3],$stateWordColors[3]
+    elseif ($TotalFreeMemoryPercentage -le 5) {
+        $outVmHostFreeMemoryState = $stateBgColors[3], $stateBgColors[3], $stateWordColors[3]
         $highL = $true
     }
-    else
-    {
-        $outVmHostFreeMemoryState = $stateBgColors[0],$stateBgColors[0],"#BDBDBD"
+    else {
+        $outVmHostFreeMemoryState = $stateBgColors[0], $stateBgColors[0], "#BDBDBD"
     }
 
     # Hostname
@@ -1424,45 +1357,39 @@ foreach ($vmHostItem in $vmHosts) {
      
     # Uptime
     $vmHostUptime = ([Management.ManagementDateTimeConverter]::ToDateTime($vmHostWmiData.LocalDateTime)) - ([Management.ManagementDateTimeConverter]::ToDateTime($vmHostWmiData.LastBootUpTime))
-        if($vmHostUptime.Days -eq "0"){$vmHostUptimeDays = ""}
-        else{$vmHostUptimeDays = ($vmHostUptime.Days).ToString() + " <span style=""font-size:10px;color:#BDBDBD"">Days</span> <br>"}
+    if ($vmHostUptime.Days -eq "0") { $vmHostUptimeDays = "" }
+    else { $vmHostUptimeDays = ($vmHostUptime.Days).ToString() + " <span style=""font-size:10px;color:#BDBDBD"">Days</span> <br>" }
     $vmHostUptime = ($vmHostUptime.Hours).ToString() + ":" + ($vmHostUptime.Minutes).ToString() + ":" + ($vmHostUptime.Seconds).ToString()
 
     # OS Version
-    $vmHostOsVersion = ($vmHostWmiData.Caption).Replace("Microsoft ","")
+    $vmHostOsVersion = ($vmHostWmiData.Caption).Replace("Microsoft ", "")
 
     # Processor socket and HT state
-    $processorData = sGet-Wmi -ComputerName $vmHostItem -Namespace root\CIMv2 -Class Win32_Processor -Property DeviceID,NumberOfCores,NumberOfLogicalProcessors
-    if ($processorData[1] -eq 1)
-    {
-        $socketCount = ($processorData[0] | ForEach-Object {$_.DeviceID} | select-object -unique).Count
+    $processorData = Get-WmiExt -ComputerName $vmHostItem -Namespace root\CIMv2 -Class Win32_Processor -Property DeviceID, NumberOfCores, NumberOfLogicalProcessors
+    if ($processorData[1] -eq 1) {
+        $socketCount = ($processorData[0] | ForEach-Object { $_.DeviceID } | select-object -unique).Count
         $coreCount = ($processorData[0].NumberOfCores | Measure-Object -Sum).Sum
         $logicalProcCount = ($processorData[0].NumberOfLogicalProcessors | Measure-Object -Sum).Sum
 
-        if ($logicalProcCount -gt $coreCount)
-        {
+        if ($logicalProcCount -gt $coreCount) {
             $htState = "Active"
         }
-        Else
-        {
+        Else {
             $htState = "Inactive"
         }
     }
-    else
-    {
+    else {
         $socketCount = "-"
         $htState = "Unknown"
     }
 
     $vmHostLpCount = $vmHostGet.LogicalProcessorCount
-    if (!$vmHostLpCount)
-    {
+    if (!$vmHostLpCount) {
         $vmHostLpCount = $logicalProcCount
     }
 
     # For Cluster Overview
-    if(($Cluster) -and ($vmHostState -eq "Up"))
-    {
+    if (($Cluster) -and ($vmHostState -eq "Up")) {
         $ovUpNode = $ovUpNode + 1
         $ovTotalLP = $ovTotalLP + $vmHostLpCount
         $ovUsedMemory = $ovUsedMemory + ($vmHostWmiData.TotalVisibleMemorySize - $vmHostWmiData.FreePhysicalMemory)
@@ -1470,19 +1397,18 @@ foreach ($vmHostItem in $vmHosts) {
     }
 
     # LP:VP Ratio
-    $vmHostVpLpRatio = ("{0:N2}" -f ($vmHostTotalVProc / $vmHostLpCount)).Replace(".00","")
+    $vmHostVpLpRatio = ("{0:N2}" -f ($vmHostTotalVProc / $vmHostLpCount)).Replace(".00", "")
 
     # Computer and Processor Manufacturer/Model Info
-    $outVmHostComputerInfo = gwmi -ComputerName $vmHostItem -Class Win32_ComputerSystem -Property Manufacturer,Model
+    $outVmHostComputerInfo = gwmi -ComputerName $vmHostItem -Class Win32_ComputerSystem -Property Manufacturer, Model
     $outVmHostProcModel = (gwmi -ComputerName $vmHostItem -Class Win32_Processor).Name
-    if($outVmHostProcModel.count -gt 1)
-    {
+    if ($outVmHostProcModel.count -gt 1) {
         $outVmHostProcModel = $outVmHostProcModel[0]
     }
-    $outVmHostProcModel = $outVmHostProcModel.Replace("           "," ")
+    $outVmHostProcModel = $outVmHostProcModel.Replace("           ", " ")
 
     # Data Line
-    $chargerVMHostTable ="
+    $chargerVMHostTable = "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left;""><abbr title=""Manufacturer: $($outVmHostComputerInfo.Manufacturer)&#10;Model: $($outVmHostComputerInfo.Model)"">$($outVMHostName) <span style=""font-size:10px;color:orange"">*</span></abbr><br><span style=""font-size:10px;color:#BDBDBD;text-align:left"">$($vmHostOsVersion)</span></p></td>
                 <td bgcolor=""$($outVmHostState[1])""><p style=""color:$($outVmHostState[2])"">$($outVmHostState[0])</p></td>
@@ -1497,48 +1423,41 @@ foreach ($vmHostItem in $vmHosts) {
             </tr>"
 
     # Add to HTML Table
-    if ($HighlightsOnly -eq $false)
-    {
+    if ($HighlightsOnly -eq $false) {
         # VMHost Output
         $outVMHostTable += $chargerVMHostTable
     }
-    elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true))
-    {
+    elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true)) {
         # VMHost Output
         $outVMHostTable += $chargerVMHostTable
     }
-    else
-    {
+    else {
         # Blank
     }
 }
 
 # Add offline or unsupported standalone hosts
-if ($invalidVmHost)
-{
+if ($invalidVmHost) {
     [bytle]$numb = 0
-    ForEach ($VMhostIN in $invalidVmHost)
-    {
+    ForEach ($VMhostIN in $invalidVmHost) {
 
-    $outVMHostTable +="
+        $outVMHostTable += "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left;"">$(($VMhostIN).ToUpper())<br><span style=""font-size:10px;color:#BDBDBD;text-align:left"">Operating System Unknown</span></p></td>
                 <td bgcolor=""$($stateBgColors[2])""><p style=""color:$($stateWordColors[2])"">Unaccessible</p></td>
                 <td colspan=""8""><p style=""text-align:left; color:#BDBDBD"">$($invalidVmHostMsg[$numb])</p></td>
             </tr>"
     
-    $numb = $numb + 1
+        $numb = $numb + 1
 
     }
 }
 
 # Add down cluster nodes
-if ($downClusterNodes)
-{
-    ForEach ($downClusterNode in $downClusterNodes)
-    {
+if ($downClusterNodes) {
+    ForEach ($downClusterNode in $downClusterNodes) {
 
-    $outVMHostTable +="
+        $outVMHostTable += "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left;"">$($downClusterNode)<br><span style=""font-size:10px;color:#BDBDBD;text-align:left"">Operating System Unknown</span></p></td>
                 <td bgcolor=""$($stateBgColors[3])""><p style=""color:$($stateWordColors[3])"">Down</p></td>
@@ -1547,26 +1466,23 @@ if ($downClusterNodes)
     }
 }
 
-if (($outVMHostTable -eq $null) -and ($downClusterNodes -eq $null))
-{
-    if ($Cluster)
-    {
-        $outVMHostTable +="
+if (($outVMHostTable -eq $null) -and ($downClusterNodes -eq $null)) {
+    if ($Cluster) {
+        $outVMHostTable += "
             <tr><!--Data Line-->
                 <td colspan=""10""><p style=""text-align:center""><span style=""padding-top:1px;padding-bottom:1px;background-color:#ACFA58;color:#298A08"">&nbsp;&nbsp;All Hyper-V Cluster Nodes are healthy&nbsp;&nbsp;</span></p></td>
             </tr>"
     }
-    else
-    {
-        $outVMHostTable +="
+    else {
+        $outVMHostTable += "
             <tr><!--Data Line-->
                 <td colspan=""10""><p style=""text-align:center""><span style=""padding-top:1px;padding-bottom:1px;background-color:#ACFA58;color:#298A08"">&nbsp;All Standalone Hyper-V Hosts are healthy&nbsp;&nbsp;</span></p></td>
             </tr>"
     }
 }
 
-    # End VMHosts-Table
-    $outVMHostTableEnd ="
+# End VMHosts-Table
+$outVMHostTableEnd = "
         </tbody>
         </table>
     </div><!--End VMHosts Class-->"
@@ -1615,19 +1531,16 @@ ForEach ($VMHostItem in $VMHosts) {
     $vNetworkAdapters = Get-VM -ComputerName $VMHostItem | Get-VMNetworkAdapter -ErrorAction SilentlyContinue
 
     # Offline Virtual Machine Configuration resources on this node
-    if ($Cluster)
-    {
+    if ($Cluster) {
         $offlineVmConfigs = $null
-        $offlineVmConfigs = $offlineVmConfigData | where{$_.OwnerNode -eq "$VMHostItem"}
+        $offlineVmConfigs = $offlineVmConfigData | Where-Object { $_.OwnerNode -eq "$VMHostItem" }
     }
 
     # If Get-VM is success
-    if ($VMs)
-    {
+    if ($VMs) {
         $cntVM = $cntVM + 1
         
-        foreach ($VM in $VMs)
-        {
+        foreach ($VM in $VMs) {
             $highL = $false
             $chargerVmTable = $null
             $chargerVmMemoryTable = $null
@@ -1635,15 +1548,13 @@ ForEach ($VMHostItem in $VMHosts) {
             $outVmReplFrequency = $null
 
             # Table TR Color
-            if([bool]!($vmNoInTable%2))
-            {
-               #Even or Zero
-               $vmTableTrBgColor = ""
+            if ([bool]!($vmNoInTable % 2)) {
+                #Even or Zero
+                $vmTableTrBgColor = ""
             }
-            else
-            {
-               #Odd
-               $vmTableTrBgColor = "#F9F9F9"
+            else {
+                #Odd
+                $vmTableTrBgColor = "#F9F9F9"
             }
 
             # Name and Config Path
@@ -1651,12 +1562,10 @@ ForEach ($VMHostItem in $VMHosts) {
             $outVmPath = $VM.ConfigurationLocation
 
             # Generation and Version
-            if (!$VM.Generation -and !$VM.Version)
-            {
+            if (!$VM.Generation -and !$VM.Version) {
                 $outVmGenVer = "<span style=""font-size:10px;color:#BDBDBD;text-align:left"">"
             }
-            else
-            {
+            else {
                 $outVmGenVer = "<br><span style=""font-size:10px;color:#BDBDBD;text-align:left"">Gen$($VM.Generation) (v$($VM.Version))"
             }
 
@@ -1664,27 +1573,21 @@ ForEach ($VMHostItem in $VMHosts) {
             $outVmState = $VM.State
 
             # IsClustered Yes or No
-            if ($VM.IsClustered -eq $True)
-            {
+            if ($VM.IsClustered -eq $True) {
                 # For Cluster Overview (Total and Used VmMemory)
-                if ($VM.State -eq "Running")
-                {
+                if ($VM.State -eq "Running") {
                     $ovRunningVm = $ovRunningVm + 1
                 }
 
-                if ($VM.State -eq "Paused")
-                {
+                if ($VM.State -eq "Paused") {
                     $ovPausedVm = $ovPausedVm + 1
                 }
 
-                if(($VM.State -eq "Running") -or ($VM.State -eq "Paused"))
-                {
-                    if(!$VM.DynamicMemoryEnabled)
-                    {
+                if (($VM.State -eq "Running") -or ($VM.State -eq "Paused")) {
+                    if (!$VM.DynamicMemoryEnabled) {
                         $ovTotalVmMemory = $ovTotalVmMemory + $VM.MemoryStartup
                     }
-                    else
-                    {
+                    else {
                         $ovTotalVmMemory = $ovTotalVmMemory + $VM.MemoryMaximum
                     }
 
@@ -1696,88 +1599,70 @@ ForEach ($VMHostItem in $VMHosts) {
                 $outVmIsClustered = "Yes"
                 $clusVmState = (Get-ClusterResource -Cluster $ClusterName -VMId $VM.VMId -ErrorAction SilentlyContinue -ErrorVariable getClusVMerr).State
 
-                if ($getClusVMerr)
-                {
+                if ($getClusVMerr) {
                     $outVmState = "Unknown"
                 }
-                elseif ($clusVmState -eq "Online")
-                {
-                    if ($VM.State -eq "Paused")
-                    {
+                elseif ($clusVmState -eq "Online") {
+                    if ($VM.State -eq "Paused") {
                         $outVmState = "Paused"
                     }
-                    else
-                    {
+                    else {
                         $outVmState = "Running"
                     } 
                 }
-                elseif ($clusVmState -eq "Offline")
-                {
-                    if ($VM.State -eq "Saved")
-                    {
+                elseif ($clusVmState -eq "Offline") {
+                    if ($VM.State -eq "Saved") {
                         $outVmState = "Saved"
                     }
-                    else
-                    {
+                    else {
                         $outVmState = "Off"
                     } 
                 }
-                else
-                {
+                else {
                     $outVmState = $clusVmState
                 }
             }
-            else
-            {
+            else {
                 $outVmIsClustered = "No"
             }
 
             # VM State Color
-            if ($outVmState -eq "Running")
-            {
+            if ($outVmState -eq "Running") {
                 $vmStateBgColor = $stateBgColors[1]
                 $vmStateWordColor = $stateWordColors[1]
             }
-            Elseif ($outVmState -eq "Off")
-            {
+            Elseif ($outVmState -eq "Off") {
                 $vmStateBgColor = $stateBgColors[2]
                 $vmStateWordColor = $stateWordColors[2]
             }
-            Elseif (($outVmState -match "Critical") -or ($outVmState -match "Failed"))
-            {
+            Elseif (($outVmState -match "Critical") -or ($outVmState -match "Failed")) {
                 $vmStateBgColor = $stateBgColors[3]
                 $vmStateWordColor = $stateWordColors[3]
                 $highL = $true
             }
-            Elseif (($outVmState -eq "Paused") -or ($outVmState -eq "Saved"))
-            {
+            Elseif (($outVmState -eq "Paused") -or ($outVmState -eq "Saved")) {
                 $vmStateBgColor = $stateBgColors[4]
                 $vmStateWordColor = $stateWordColors[4]
                 $highL = $true
             }
-            else
-            {
+            else {
                 $vmStateBgColor = $stateBgColors[5]
                 $vmStateWordColor = $stateWordColors[5]
             }
         
             # Uptime
-            if ($VM.Uptime -eq "00:00:00")
-            {
+            if ($VM.Uptime -eq "00:00:00") {
                 $outVmUptimeDays = $null
                 $outVmUptime = "Stopped"
             }
-            else
-            {
+            else {
                 $outVmUptimeDays = (($VM.Uptime).Days).ToString()
-                    if ($outVmUptimeDays -eq "0")
-                    {
-                        $outVmUptimeDays = $null
-                    }
-                    else
-                    {
-                        $outVmUptimeDays = $outVmUptimeDays + " <span style=""font-size:10px;color:#BDBDBD"">Days</span> <br>"
-                    }
+                if ($outVmUptimeDays -eq "0") {
+                    $outVmUptimeDays = $null
+                }
+                else {
+                    $outVmUptimeDays = $outVmUptimeDays + " <span style=""font-size:10px;color:#BDBDBD"">Days</span> <br>"
+                }
                 $outVmUptime = (($VM.Uptime).Hours).ToString() + ":" + (($VM.Uptime).Minutes).ToString() + ":" + (($VM.Uptime).Seconds).ToString()
             }
 
@@ -1788,49 +1673,41 @@ ForEach ($VMHostItem in $VMHosts) {
             $outVmCPU = $VM.ProcessorCount
         
             # IS State, Version and Color
-            if ($VM.IntegrationServicesState -eq "Up to date")
-            {
+            if ($VM.IntegrationServicesState -eq "Up to date") {
                 $outVmIs = "UpToDate"
                 $outVmIsVer = $VM.IntegrationServicesVersion
                 $vmIsStateBgColor = ""
                 $vmIsStateWordColor = ""
             }
-            elseif ($VM.IntegrationServicesState -eq "Update required")
-            {
+            elseif ($VM.IntegrationServicesState -eq "Update required") {
                 $outVmIs = "UpdateRequired"
                 $outVmIsVer = $VM.IntegrationServicesVersion
                 $vmIsStateBgColor = $stateBgColors[4]
                 $vmIsStateWordColor = $stateWordColors[4]
                 $highL = $true
             }
-            else
-            {
-                if ($vm.State -eq "Running")
-                {
-                    if ($VM.IntegrationServicesVersion -eq "6.2.9200.16433")
-                    {
+            else {
+                if ($vm.State -eq "Running") {
+                    if ($VM.IntegrationServicesVersion -eq "6.2.9200.16433") {
                         $outVmIs = "UpToDate"
                         $outVmIsVer = $VM.IntegrationServicesVersion
                         $vmIsStateBgColor = ""
                         $vmIsStateWordColor = ""
                     }
-                    elseif ($VM.IntegrationServicesVersion -eq $null)
-                    {
+                    elseif ($VM.IntegrationServicesVersion -eq $null) {
                         $outVmIs = "NotDetected"
                         $outVmIsVer = "NotDetected"
                         $vmIsStateBgColor = ""
                         $vmIsStateWordColor = ""
                     }
-                    else
-                    {
+                    else {
                         $outVmIs = "MayBeRequired"
                         $outVmIsVer = $VM.IntegrationServicesVersion
                         $vmIsStateBgColor = ""
                         $vmIsStateWordColor = ""
                     }
                 }
-                else
-                {
+                else {
                     $outVmIs = "NotDetected"
                     $outVmIsVer = "NotDetected"
                     $vmIsStateBgColor = ""
@@ -1839,8 +1716,7 @@ ForEach ($VMHostItem in $VMHosts) {
             }
         
             # Checkpoint State and Color
-            if ($VM.ParentSnapshotId)
-            {
+            if ($VM.ParentSnapshotId) {
                 $outVmChekpoint = "Yes"
                 $vmCheckpointBgColor = $stateBgColors[4]
                 $vmCheckpointWordColor = $stateWordColors[4]
@@ -1848,8 +1724,7 @@ ForEach ($VMHostItem in $VMHosts) {
                 $outVmChekpointCount = ($vmChekpointCount).ToString() + " Checkpoint(s)"
                 $highL = $true
             }
-            else
-            {
+            else {
                 $outVmChekpoint = "No"
                 $vmCheckpointBgColor = ""
                 $vmCheckpointWordColor = ""
@@ -1857,42 +1732,34 @@ ForEach ($VMHostItem in $VMHosts) {
             }
 
             # Replication
-            if ($VM.ReplicationState -ne "Disabled")
-            {
+            if ($VM.ReplicationState -ne "Disabled") {
                 $outVmRepl = $null
                 $chargerVmRepl1 = $null
                 $chargerVmRepl2 = $null
                 $getVmReplication = Get-VMReplication -ComputerName $VM.ComputerName -VMName $VM.Name
 
-                foreach ($getVmReplItem in $getVmReplication)
-                {
-                    if ($getVmReplItem.Mode -eq "Primary") #Primary
-                    {
+                foreach ($getVmReplItem in $getVmReplication) {
+                    if ($getVmReplItem.Mode -eq "Primary") { #Primary
                         $outVmReplType = "Primary"
                         $outVmReplServer = "ReplicaServer: $($getVmReplItem.ReplicaServer) &#10;"
                     }
-                    elseif ($getVmReplItem.Mode -eq "Replica" -and $getVmReplItem.RelationshipType -eq "Simple") #Replica
-                    {
+                    elseif ($getVmReplItem.Mode -eq "Replica" -and $getVmReplItem.RelationshipType -eq "Simple") { #Replica
                         $outVmReplType = "Replica"
                         $outVmReplServer = "PrimaryServer: $($getVmReplItem.PrimaryServer) &#10;"
                     }
-                    elseif ($getVmReplItem.Mode -eq "Replica" -and $getVmReplItem.RelationshipType -eq "Extended") #Replica to Extended
-                    {
+                    elseif ($getVmReplItem.Mode -eq "Replica" -and $getVmReplItem.RelationshipType -eq "Extended") { #Replica to Extended
                         $outVmReplType = "Extended"
                         $outVmReplServer = "ReplicaServer: $($getVmReplItem.ReplicaServer) &#10;"
                     }
-                    elseif ($getVmReplItem.Mode -eq "ExtendedReplica") #Extended
-                    {
+                    elseif ($getVmReplItem.Mode -eq "ExtendedReplica") { #Extended
                         $outVmReplType = "Extended"
                         $outVmReplServer = "PrimaryServer: $($getVmReplItem.PrimaryServer) &#10;"
                     }
-                    elseif ($getVmReplItem.Mode -eq "Replica")
-                    {
+                    elseif ($getVmReplItem.Mode -eq "Replica") {
                         $outVmReplType = "Replica"
                         $outVmReplServer = "PrimaryServer: $($getVmReplItem.PrimaryServer) &#10;"
                     }
-                    else
-                    {
+                    else {
                         $outVmReplType = $getVmReplItem.Mode
                         $outVmReplServer = "PrimaryServer/ReplicaServer &#10;"
                     }
@@ -1903,143 +1770,116 @@ ForEach ($VMHostItem in $VMHosts) {
                     $outVMReplState = "ReplState: $($getVmReplItem.State)"
 
                     # Repl Frequency
-                    if ($getVmReplItem.FrequencySec -gt 30)
-                    {
-                        $outVmReplFrequency = "Frequency: " + (($getVmReplItem.FrequencySec)/60) + " Min &#10;"
+                    if ($getVmReplItem.FrequencySec -gt 30) {
+                        $outVmReplFrequency = "Frequency: " + (($getVmReplItem.FrequencySec) / 60) + " Min &#10;"
                     }
-                    elseif ($getVmReplItem.FrequencySec -le 30 -and $getVmReplItem.FrequencySec -gt 0)
-                    {
+                    elseif ($getVmReplItem.FrequencySec -le 30 -and $getVmReplItem.FrequencySec -gt 0) {
                         $outVmReplFrequency = "Frequency: " + ($getVmReplItem.FrequencySec) + " Sec &#10;"
                     }
-                    elseif($OsVersion -like "6.2*")
-                    {
+                    elseif ($OsVersion -like "6.2*") {
                         $outVmReplFrequency = "Frequency: 5 Min &#10;"
                     }
-                    else
-                    {
+                    else {
                         $outVmReplFrequency = "Frequency: &#10;"
                     }
 
                     # Repl Health Colors
-                    if ($getVmReplItem.Health -eq "Normal")
-                    {
+                    if ($getVmReplItem.Health -eq "Normal") {
                         $vmReplHealthBgColor = $stateBgColors[1]
                         $vmReplHealthWordColor = $stateWordColors[1]
                     }
-                    elseif ($getVmReplItem.Health -eq "Warning")
-                    {
+                    elseif ($getVmReplItem.Health -eq "Warning") {
                         $vmReplHealthBgColor = $stateBgColors[4]
                         $vmReplHealthWordColor = $stateWordColors[4]
                         $highL = $true
                     }
-                    elseif ($getVmReplItem.Health -eq "Critical")
-                    {
+                    elseif ($getVmReplItem.Health -eq "Critical") {
                         $vmReplHealthBgColor = $stateBgColors[3]
                         $vmReplHealthWordColor = $stateWordColors[3]
                         $highL = $true
                     }
-                    else
-                    {
+                    else {
                         $vmReplHealthBgColor = $stateBgColors[5]
                         $vmReplHealthWordColor = $stateWordColors[5]
                         $highL = $true
                     }
 
-                    if ($getVmReplItem.Mode -eq "Replica" -and $getVmReplItem.RelationshipType -eq "Extended")
-                    {
+                    if ($getVmReplItem.Mode -eq "Replica" -and $getVmReplItem.RelationshipType -eq "Extended") {
                         $chargerVmRepl2 = "<p style=""margin-top:8px;background-color:$($vmReplHealthBgColor);color:$($vmReplHealthWordColor)""><abbr title=""$($outVmReplHealth)$($outVmReplMode)$($outVmReplServer)$($outVmReplFrequency)$($outVmLastReplTime)$($outVMReplState)"">$($outVmReplType)</abbr></p>"
                     }
-                    else
-                    {
+                    else {
                         $chargerVmRepl1 = "<p style=""background-color:$($vmReplHealthBgColor);color:$($vmReplHealthWordColor)""><abbr title=""$($outVmReplHealth)$($outVmReplMode)$($outVmReplServer)$($outVmReplFrequency)$($outVmLastReplTime)$($outVMReplState)"">$($outVmReplType)</abbr></p>"
                     }
                 }
 
                 $outVmRepl = $chargerVmRepl1 + $chargerVmRepl2
             }
-            else
-            {
+            else {
                 $outVmRepl = "<p>N/E</p>"
                 $vmReplHealthBgColor = ""
                 $vmReplHealthWordColor = ""
             }
 
             # Network Adapter
-            if ($vNetworkAdapters | where{$_.VMId -eq $VM.VMId})
-            {
+            if ($vNetworkAdapters | Where-Object { $_.VMId -eq $VM.VMId }) {
                 $vmNetAdapterCount = 1
                 $vmNetAdapters = $null
                 $outVmNetAdapter = $null
-                $vmNetAdapters = $vNetworkAdapters | where{$_.VMId -eq $VM.VMId}
+                $vmNetAdapters = $vNetworkAdapters | Where-Object { $_.VMId -eq $VM.VMId }
 
-                foreach ($vmNetAdapter in $vmNetAdapters)
-                {
+                foreach ($vmNetAdapter in $vmNetAdapters) {
                     # Type
-                    if (!$vmNetAdapter.IsLegacy)
-                    {
+                    if (!$vmNetAdapter.IsLegacy) {
                         $outVmNetAdapterName = "Synthetic Network Adapter"
                     }
-                    else
-                    {
+                    else {
                         $outVmNetAdapterName = "Legacy Network Adapter"
                     }
                     
                     # IP
-                    if ($vmNetAdapter.IPAddresses)
-                    {
-                        if ($vmNetAdapter.IPAddresses.Count -gt 1)
-                        {
+                    if ($vmNetAdapter.IPAddresses) {
+                        if ($vmNetAdapter.IPAddresses.Count -gt 1) {
                             $outVmNetAdapterIP = ($vmNetAdapter.IPAddresses -join ', ').ToString()
                         }
-                        else
-                        {
+                        else {
                             $outVmNetAdapterIP = $vmNetAdapter.IPAddresses
                         }
                     }
-                    else
-                    {
+                    else {
                         $outVmNetAdapterIP = "Unable to get ip address information"
                     }
 
                     # MAC
-                    if ($vmNetAdapter.MacAddress)
-                    {
+                    if ($vmNetAdapter.MacAddress) {
                         $outVmNetAdapterMacAddress = "MAC Address: $($vmNetAdapter.MacAddress)"
                     }
-                    else
-                    {
+                    else {
                         $outVmNetAdapterMacAddress = "MAC Address: Null"
                     }
                     
-                    if ($vmNetAdapter.DynamicMacAddressEnabled)
-                    {
+                    if ($vmNetAdapter.DynamicMacAddressEnabled) {
                         $outVmNetAdapterMacAddressType = "MAC Type: Dynamic"
                     }
-                    else
-                    {
+                    else {
                         $outVmNetAdapterMacAddressType = "MAC Type: Static"
                     }
 
                     # Connection
-                    if ($vmNetAdapter.Connected)
-                    {
+                    if ($vmNetAdapter.Connected) {
                         $outVmNetAdapterConnection = "Connected"
                         $outVmNetAdapterSwitch = "Virtual Switch Name: $($vmNetAdapter.SwitchName)"
 
                     }
-                    else
-                    {
+                    else {
                         $outVmNetAdapterConnection = "Not connected"
                         $outVmNetAdapterSwitch = "Not connected to a switch"
                     }
 
                     # VLAN
-                    if (($vmNetAdapter.VlanSetting.AccessVlanId -eq 0) -or ($vmNetAdapter.VlanSetting.AccessVlanId -eq $null))
-                    {
+                    if (($vmNetAdapter.VlanSetting.AccessVlanId -eq 0) -or ($vmNetAdapter.VlanSetting.AccessVlanId -eq $null)) {
                         $outVmNetAdapterVlan = "VLAN: Disabled"
                     }
-                    else
-                    {
+                    else {
                         $outVmNetAdapterVlan = "VLAN: Enabled, ID $($vmNetAdapter.VlanSetting.AccessVlanId)"
                     }
 
@@ -2048,29 +1888,23 @@ ForEach ($VMHostItem in $VMHosts) {
                     $outVmNetAdapterRouterGuard = "Router Guard: $($vmNetAdapter.RouterGuard)"
                     $outVmNetAdapterPortMirroringMode = "Port Mirroring: $($vmNetAdapter.PortMirroringMode)"
                     
-                    if ($vmNetAdapter.ClusterMonitored)
-                    {
+                    if ($vmNetAdapter.ClusterMonitored) {
                         $outVmNetAdapterClusterMonitored = "Protected Network: On"
                     }
-                    else
-                    {
-                        if ($OsVersion -like "6.2*")
-                        {
+                    else {
+                        if ($OsVersion -like "6.2*") {
                             $outVmNetAdapterClusterMonitored = "Protected Network: N/A"
                         }
-                        else
-                        {
+                        else {
                             $outVmNetAdapterClusterMonitored = "Protected Network: Off"
                         }
                     }
                     
                     # Write
-                    if ($vmNetAdapterCount -eq 1)
-                    {
+                    if ($vmNetAdapterCount -eq 1) {
                         $chargerVmNetAdapter = "<p style=""text-align:left""><abbr title=""$($outVmNetAdapterIP)"">$($outVmNetAdapterName)<span style=""font-size:10px;color:orange""> *</span><br><span style=""font-size:10px;color:#BDBDBD"">&#10148; <abbr title=""$($outVmNetAdapterSwitch)"">$($outVmNetAdapterConnection)</abbr> | <abbr title=""$($outVmNetAdapterVlan)"">VLAN</abbr> | <abbr title=""$($outVmNetAdapterMacAddress) &#10;$outVmNetAdapterMacAddressType &#10;$outVmNetAdapterDhcpGuard &#10;$outVmNetAdapterRouterGuard &#10;$outVmNetAdapterPortMirroringMode &#10;$outVmNetAdapterClusterMonitored"">Advanced</abbr></span></p>"
                     }
-                    else
-                    {
+                    else {
                         $chargerVmNetAdapter = "<p style=""text-align:left;margin-top:6px""><abbr title=""$($outVmNetAdapterIP)"">$($outVmNetAdapterName)<span style=""font-size:10px;color:orange""> *</span><br><span style=""font-size:10px;color:#BDBDBD"">&#10148; <abbr title=""$($outVmNetAdapterSwitch)"">$($outVmNetAdapterConnection)</abbr> | <abbr title=""$($outVmNetAdapterVlan)"">VLAN</abbr> | <abbr title=""$($outVmNetAdapterMacAddress) &#10;$outVmNetAdapterMacAddressType &#10;$outVmNetAdapterDhcpGuard &#10;$outVmNetAdapterRouterGuard &#10;$outVmNetAdapterPortMirroringMode &#10;$outVmNetAdapterClusterMonitored"">Advanced</abbr></span></p>"
                     }
 
@@ -2079,9 +1913,8 @@ ForEach ($VMHostItem in $VMHosts) {
                     $vmNetAdapterCount = $vmNetAdapterCount + 1
                 }
             }
-            else
-            {
-                        $outVmNetAdapter = "<p style=""text-align:left"">No Network Adapter</p>"
+            else {
+                $outVmNetAdapter = "<p style=""text-align:left"">No Network Adapter</p>"
             }
 
             # Get Disks
@@ -2090,19 +1923,16 @@ ForEach ($VMHostItem in $VMHosts) {
             $getVhdErr = $null
             $vmDisks = Get-VHD -ComputerName $VMHostItem -VMId $vm.VMId -ErrorAction SilentlyContinue -ErrorVariable getVhdErr
             
-            if ($getVhdErr)
-            {
-                if ($rowSpanCount -eq 0)
-                {
-			        $vmDiskOutput +="
+            if ($getVhdErr) {
+                if ($rowSpanCount -eq 0) {
+                    $vmDiskOutput += "
                 <td><p style=""text-align:left""><span style=""background-color:$($stateBgColors[3]);color:$($stateWordColors[3])"">&nbsp;$($getVhdErr.count) VHD file(s) missing&nbsp;</span> <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; CurrentFileSize N/A (MaximumDiskSize N/A) <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; VhdType N/A | ControllerType N/A | Fragmentation N/A</span></p></td>
             </tr>"
                     $highL = $true
                     $rowSpanCount = $rowSpanCount + 1
                 }
-                else
-                {
-                    $vmDiskOutput +="
+                else {
+                    $vmDiskOutput += "
             <tr style=""background:$($vmTableTrBgColor)"">
                 <td Style=""border-top:2px dotted #ccc""><p style=""text-align:left""><span style=""background-color:$($stateBgColors[3]);color:$($stateWordColors[3])"">&nbsp;$($getVhdErr.count) VHD file(s) missing&nbsp;</span> <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; CurrentFileSize N/A (MaximumDiskSize N/A) <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; VhdType N/A | ControllerType N/A | Fragmentation N/A</span></p></td>
             </tr>"
@@ -2111,25 +1941,21 @@ ForEach ($VMHostItem in $VMHosts) {
                 }
             }
 
-            $vmPTDisks = Get-VMHardDiskDrive -ComputerName $VMHostItem -VMname $vm.name | where{$_.Path -like "Disk*"}
+            $vmPTDisks = Get-VMHardDiskDrive -ComputerName $VMHostItem -VMname $vm.name | Where-Object { $_.Path -like "Disk*" }
 
             # Pass-through
             $vmPTDiskNo = 1
-            if ($vmPTDisks)
-            {
-                foreach ($vmPTDisk in $vmPTDisks)
-                {
-                    if ($rowSpanCount -eq 0)
-                    {
-			            $vmDiskOutput +="
+            if ($vmPTDisks) {
+                foreach ($vmPTDisk in $vmPTDisks) {
+                    if ($rowSpanCount -eq 0) {
+                        $vmDiskOutput += "
                 <td><p style=""text-align:left""><abbr title=""$($vmPTDisk.Path)"">Pass-through disk $vmPTDiskNo <span style=""font-size:10px;color:orange"">*</span></abbr> <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; Path: $($vmPTDisk.Path)</span> <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; $($vmPTDisk.ControllerType) Controller</span></p></td>
             </tr>"
                         $rowSpanCount = $rowSpanCount + 1
                         $vmPTDiskNo = $vmPTDiskNo + 1
                     }
-                    else
-                    {
-                        $vmDiskOutput +="
+                    else {
+                        $vmDiskOutput += "
             <tr style=""background:$($vmTableTrBgColor)"">
                 <td Style=""border-top:2px dotted #ccc""><p style=""text-align:left""><abbr title=""$($vmPTDisk.Path)"">Pass-through disk $vmPTDiskNo <span style=""font-size:10px;color:orange"">*</span></abbr> <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; Path: $($vmPTDisk.Path)</span> <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; $($vmPTDisk.ControllerType) Controller</span></p></td>
             </tr>"
@@ -2140,16 +1966,13 @@ ForEach ($VMHostItem in $VMHosts) {
             }
 
             # VHD
-            if ($vmDisks -eq $null)
-            {
-                 $vmDiskOutput = "
+            if ($vmDisks -eq $null) {
+                $vmDiskOutput = "
                 <td ><p style=""text-align:left""><span style=""background-color:$($stateBgColors[4]);color:$($stateWordColors[4])"">&nbsp;Does not have a virtual disk&nbsp;</span></p></td>"
                 $highL = $true
             }
-            else
-            {    
-                foreach($vmDisk in $vmDisks)
-                {
+            else {    
+                foreach ($vmDisk in $vmDisks) {
                     [array]$vmDiskData = $null
 
                     # Name, Path, Type, Size and File Size
@@ -2160,8 +1983,7 @@ ForEach ($VMHostItem in $VMHosts) {
                     $vmDiskFileSize = sConvert-Size -DiskVolumeSpace $vmDisk.FileSize -DiskVolumeSpaceUnit byte
 
                     # For Cluster Overview
-                    if ($VM.IsClustered -eq $true -and $VM.State -eq "Running")
-                    {
+                    if ($VM.IsClustered -eq $true -and $VM.State -eq "Running") {
                         $ovUsedVmVHD = $ovUsedVmVHD + $vmDisk.FileSize
                         $ovTotalVmVHD = $ovTotalVmVHD + $vmDisk.Size
                     }
@@ -2170,52 +1992,44 @@ ForEach ($VMHostItem in $VMHosts) {
                     $activeVhdFileSize = $vmDisk.FileSize
                  
                     # Get Controller Type
-                    $vmDiskControllerType = (Get-VMHardDiskDrive -ComputerName $VMHostItem -VMName $vm.VMName | where{$_.Path -eq $vmDiskPath}).ControllerType
+                    $vmDiskControllerType = (Get-VMHardDiskDrive -ComputerName $VMHostItem -VMName $vm.VMName | Where-Object { $_.Path -eq $vmDiskPath }).ControllerType
 
                     # VHD Fragmentation and Color
-                    if ($vmDisk.FragmentationPercentage -eq $null)
-                    {
-                       $vmDiskFragmentation = "N/A"
-                       $vmDiskFragmentationBgColor = ""
-                       $vmDiskFragmentationTextColor = ""
+                    if ($vmDisk.FragmentationPercentage -eq $null) {
+                        $vmDiskFragmentation = "N/A"
+                        $vmDiskFragmentationBgColor = ""
+                        $vmDiskFragmentationTextColor = ""
                     }
-                    else
-                    {
-                       $vmDiskFragmentation = "%$($vmDisk.FragmentationPercentage)"
+                    else {
+                        $vmDiskFragmentation = "%$($vmDisk.FragmentationPercentage)"
                 
-                       if (($vmDisk.FragmentationPercentage -ge "30") -and ($vmDisk.FragmentationPercentage -lt "50")) 
-                       {
-                           $vmDiskFragmentationBgColor = $stateBgColors[4]
-                           $vmDiskFragmentationTextColor = $stateWordColors[4]
-                           $highL = $true
-                       }
-                       elseif ($vmDisk.FragmentationPercentage -ge "50") 
-                       {
-                           $vmDiskFragmentationBgColor = $stateBgColors[3]
-                           $vmDiskFragmentationTextColor = $stateWordColors[3]
-                           $highL = $true
-                       }
-                       else
-                       {
-                           $vmDiskFragmentationBgColor = ""
-                           $vmDiskFragmentationTextColor = ""
-                       }
+                        if (($vmDisk.FragmentationPercentage -ge "30") -and ($vmDisk.FragmentationPercentage -lt "50")) {
+                            $vmDiskFragmentationBgColor = $stateBgColors[4]
+                            $vmDiskFragmentationTextColor = $stateWordColors[4]
+                            $highL = $true
+                        }
+                        elseif ($vmDisk.FragmentationPercentage -ge "50") {
+                            $vmDiskFragmentationBgColor = $stateBgColors[3]
+                            $vmDiskFragmentationTextColor = $stateWordColors[3]
+                            $highL = $true
+                        }
+                        else {
+                            $vmDiskFragmentationBgColor = ""
+                            $vmDiskFragmentationTextColor = ""
+                        }
                     }
 
                     sPrint -Type 5 -Message "$($VM.Name): Disk - $($vmDisk.Path)" -WriteToLogFile $False
 
                     # If differencing exist
-                    if (!([string]::IsNullOrEmpty($vmDisk.ParentPath)))
-                    {
+                    if (!([string]::IsNullOrEmpty($vmDisk.ParentPath))) {
                         sPrint -Type 5 -Message "$($VM.Name): Parent Disk - $($vmDisk.ParentPath)" -WriteToLogFile $False
                         # Checkpoint label
                         $cpNumber = $null
                         $cpNumber = $vmChekpointCount
 
-                        if ($vmDiskPath.EndsWith(".avhdx",1))
-                        {
-                            if (($cpNumber -ne 0) -or ($cpNumber -ne $null))
-                            {
+                        if ($vmDiskPath.EndsWith(".avhdx", 1)) {
+                            if (($cpNumber -ne 0) -or ($cpNumber -ne $null)) {
                                 $vmDiskName = "Checkpoint $cpNumber"
                                 $cpNumber = $cpNumber - 1
                             }
@@ -2225,8 +2039,7 @@ ForEach ($VMHostItem in $VMHosts) {
                         $parentPath = $vmDisk.ParentPath
 
                         # Differencing disk loop
-                        Do
-                        {
+                        Do {
                             $vmDiskName = $null
                             $vmDiskPath = $null
                             $vmDiskType = $null
@@ -2237,10 +2050,8 @@ ForEach ($VMHostItem in $VMHosts) {
                             $vmDiskName = $vmDiffDisk.Path.Split('\')[-1]
 
                             # Checkpoint label
-                            if ($vmDiskPath.EndsWith(".avhdx",1))
-                            {
-                                if (($cpNumber -ne 0) -or ($cpNumber -ne $null))
-                                {
+                            if ($vmDiskPath.EndsWith(".avhdx", 1)) {
+                                if (($cpNumber -ne 0) -or ($cpNumber -ne $null)) {
                                     $vmDiskName = "Checkpoint $cpNumber"
                                     $cpNumber = $cpNumber - 1
                                 }
@@ -2254,30 +2065,25 @@ ForEach ($VMHostItem in $VMHosts) {
                             $activeVhdFileSize = $activeVhdFileSize + $vmDiffDisk.FileSize
 
                             # For Cluster Overview
-                            if ($VM.IsClustered -eq $true -and $VM.State -eq "Running")
-                            {
+                            if ($VM.IsClustered -eq $true -and $VM.State -eq "Running") {
                                 $ovUsedVmVHD = $ovUsedVmVHD + $vmDiffDisk.FileSize
                             }
 
                             # Disk Fragmentation and Color
-                            if ($vmDiffDisk.FragmentationPercentage)
-                            {
+                            if ($vmDiffDisk.FragmentationPercentage) {
                                 $vmDiskFragmentation = "%$($vmDiffDisk.FragmentationPercentage)"
                 
-                                if (($vmDiffDisk.FragmentationPercentage -ge "30") -and ($vmDiffDisk.FragmentationPercentage -lt "50")) 
-                                {
+                                if (($vmDiffDisk.FragmentationPercentage -ge "30") -and ($vmDiffDisk.FragmentationPercentage -lt "50")) {
                                     $vmDiskFragmentationBgColor = $stateBgColors[4]
                                     $vmDiskFragmentationTextColor = $stateWordColors[4]
                                     $highL = $true
                                 }
-                                elseif ($vmDiffDisk.FragmentationPercentage -ge "50") 
-                                {
+                                elseif ($vmDiffDisk.FragmentationPercentage -ge "50") {
                                     $vmDiskFragmentationBgColor = $stateBgColors[3]
                                     $vmDiskFragmentationTextColor = $stateWordColors[3]
                                     $highL = $true
                                 }
-                                else
-                                {
+                                else {
                                     $vmDiskFragmentationBgColor = ""
                                     $vmDiskFragmentationTextColor = ""
                                 }
@@ -2288,14 +2094,12 @@ ForEach ($VMHostItem in $VMHosts) {
                         }
                         Until ([string]::IsNullOrEmpty($parentPath))
                     }
-                    else
-                    {
+                    else {
                         $vmDiskData = "<p style=""text-align:left""><abbr title=""$($vmDiskPath)"">$($vmDiskName)<span style=""font-size:10px;color:orange""> *</span></abbr> <br><span style=""font-size:10px;color:#BDBDBD"">&#10148; CurrentFileSize $($vmDiskFileSize[0])$($vmDiskFileSize[1]) (MaximumDiskSize $($vmDiskMaxSize[0])$($vmDiskMaxSize[1])) <br>&#10148; $($vmDiskType) VHD | $($vmDiskControllerType) Controller | Fragmentation <span style=""color:$($vmDiskFragmentationTextColor);background-color:$($vmDiskFragmentationBgColor)"">$($vmDiskFragmentation)</span></span></p>"
                     }
 
                     # Active VHD Array ($activeVhds)
-                    if ($vm.State -eq "Running")
-                    {
+                    if ($vm.State -eq "Running") {
                         $vhdHash = @{
             
                             Path      = $vmDisk.Path
@@ -2306,7 +2110,7 @@ ForEach ($VMHostItem in $VMHosts) {
                             VhdFormat = $vmDisk.VhdFormat
                             Attached  = $vmDisk.Attached
                             VMName    = $Vm.VMName
-                            }
+                        }
 
                         # Create PSCustom object
                         $customObjVHD = New-Object PSObject -Property $vhdHash
@@ -2316,15 +2120,14 @@ ForEach ($VMHostItem in $VMHosts) {
                     }
 
                     # Remove top-margin of last item
-                    $vmDiskData[-1] = $vmDiskData[-1].Replace("margin-top:5px;","")
+                    $vmDiskData[-1] = $vmDiskData[-1].Replace("margin-top:5px;", "")
 
                     # Add Indents
                     $itemC = 0
                     $indentV = ($vmDiskData.count - 1) * 14
 
-                    Do
-                    {
-                        $vmDiskData[$itemC] = $vmDiskData[$itemC].Replace("1nd3ntPlaceHolder","$indentV")
+                    Do {
+                        $vmDiskData[$itemC] = $vmDiskData[$itemC].Replace("1nd3ntPlaceHolder", "$indentV")
                         $indentV = $indentV - 14
                         $itemC = $itemC + 1
                     }
@@ -2336,16 +2139,14 @@ ForEach ($VMHostItem in $VMHosts) {
                     $vmDiskData = ($vmDiskData -join "").ToString()
 
                     # Write
-                    if ($rowSpanCount -eq 0)
-                    {
-			            $vmDiskOutput = "
+                    if ($rowSpanCount -eq 0) {
+                        $vmDiskOutput = "
                 <td>$vmDiskData</td>
             </tr>"
                         $rowSpanCount = $rowSpanCount + 1
                     }
-                    else
-                    {
-                        $vmDiskOutput +="
+                    else {
+                        $vmDiskOutput += "
             <tr style=""background:$($vmTableTrBgColor)"">
                 <td Style=""border-top:2px dotted #ccc"">$vmDiskData</td>
             </tr>"
@@ -2357,27 +2158,24 @@ ForEach ($VMHostItem in $VMHosts) {
 
             #If single VHD, rowSpanCount equal to 0 
             $rowspanHTML = ""
-            if ($rowSpanCount -eq 1)
-            {
+            if ($rowSpanCount -le 1) {
                 $rowSpanCount = 0
                 
-            } else {
+            }
+            else {
                 $rowspanHtml = "rowspan=""$($rowspanCount)"""
             }
             
             # VM Memory Information
-            if ($VM.DynamicMemoryEnabled)
-            {
+            if ($VM.DynamicMemoryEnabled) {
                 # Startup Memory
                 $outVmMemStartup = sConvert-Size -DiskVolumeSpace $VM.MemoryStartup -DiskVolumeSpaceUnit byte
 
                 # Assigned Memory
-                if ($VM.MemoryAssigned -eq 0)
-                {
+                if ($VM.MemoryAssigned -eq 0) {
                     $outVmMemAssigned = "-"
                 }
-                else
-                {
+                else {
                     $outVmMemAssigned = sConvert-Size -DiskVolumeSpace $VM.MemoryAssigned -DiskVolumeSpaceUnit byte
                 }
 
@@ -2391,24 +2189,23 @@ ForEach ($VMHostItem in $VMHosts) {
                     $rowspanHtml = "rowspan=""$($rowspanCount)"""
                 } #>
                                    
-                $chargerVmMemoryTable ="
+                $chargerVmMemoryTable = "
                 <td $($rowspanHTML) style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Startup)"">$($outVmMemStartup[0])<br><span style=""font-size:10px"">$($outVmMemStartup[1])</span></abbr></p></td>
                 <td $($rowspanHTML) style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Minimum)"">$($outVmMemMin[0])<br><span style=""font-size:10px"">$($outVmMemMin[1])</span></abbr></p></td>
                 <td $($rowspanHTML) style=""border-right: 2px dotted #ccc""><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Maximum)"">$($outVmMemMax[0])<br><span style=""font-size:10px"">$($outVmMemMax[1])</span></abbr></p></td>
                 <td $($rowspanHTML)><p style=""line-height:1.1""><abbr title=""Dynamic Memory (Assigned)"">$($outVmMemAssigned[0])<br><span style=""font-size:10px"">$($outVmMemAssigned[1])</span></abbr></p></td>"
             }
-            else
-            {
+            else {
                 # Startup Memory
                 $outVmMemStartup = sConvert-Size -DiskVolumeSpace $VM.MemoryStartup -DiskVolumeSpaceUnit byte
 
                 # Charge chargerVmMemoryTable
-                $chargerVmMemoryTable ="
+                $chargerVmMemoryTable = "
                 <td $($rowspanHTML) colspan=""4""><p style=""line-height:1.1""><abbr title=""Static Memory (Startup)"">$($outVmMemStartup[0])<br><span style=""font-size:10px"">$($outVmMemStartup[1])</span></abbr></p></td>"
             }
 
             # Data Line
-            $chargerVmTable +="
+            $chargerVmTable += "
             <tr style=""background:$($vmTableTrBgColor)""><!--Data Line-->
                 <td $($rowspanHTML)><p style=""text-align:left""><abbr title=""$($outVmPath)"">$($outVmName) <span style=""font-size:10px;color:orange"">*</span></abbr> $($outVmGenVer) <br>IsClustered:$($outVmIsClustered)</span></p></td>
                 <td $($rowspanHTML) bgcolor=""$vmStateBgColor""><p style=""color:$($vmStateWordColor)"">$($outVmState)</p></td>
@@ -2417,63 +2214,54 @@ ForEach ($VMHostItem in $VMHosts) {
                 <td $($rowspanHTML)><p style=""line-height:1.1"">$($outVmCPU)<br><span style=""font-size:10px"">CPU</span></p></td>"
             $chargerVmTable += $chargerVmMemoryTable
             
-            $chargerVmTable +="
+            $chargerVmTable += "
                 <td $($rowspanHTML)><p style=""background-color:$($vmIsStateBgColor);color:$($vmIsStateWordColor)""><abbr title=""IS Version: $($outVmIsVer)"">$($outVmIs) <span style=""font-size:10px;color:orange"">*</span></abbr></p></td>
                 <td $($rowspanHTML)><p style=""background-color:$($vmCheckpointBgColor);color:$($vmCheckpointWordColor)""><abbr title=""$($outVmChekpointCount)"">$($outVmChekpoint)</abbr></p></td>
                 <td $($rowspanHTML)>$($outVmRepl)</td>
                 <td $($rowspanHTML)>$($outVmNetAdapter)</td>"
-		        $chargerVmTable += $vmDiskOutput
+            $chargerVmTable += $vmDiskOutput
 
             # Output Data
-            if ($HighlightsOnly -eq $false)
-            {
+            if ($HighlightsOnly -eq $false) {
                 $outVMTable += $chargerVmTable
                 $vmNoInTable = $vmNoInTable + 1
             }
-            elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true))
-            {      
+            elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true)) {      
                 $outVMTable += $chargerVmTable
                 $vmNoInTable = $vmNoInTable + 1
             }
-            else
-            {
+            else {
                 # Blank
             }
         }
     }
     # Error
-    elseif ($getVMerr)
-    {
+    elseif ($getVMerr) {
         sPrint -Type 0 -Message "$($VMHostItem.ToUpper()): $($getVMerr.exception.message)" -WriteToLogFile $True
         sPrint -Type 2 -Message "Gathering VM Information for '$($VMHostItem.ToUpper())' failed." -WriteToLogFile $True
         Start-Sleep -Seconds 3
         Continue
     }
     else
-    # Blank
-    {
+    { # Blank
         sPrint -Type 2 -Message "$($VMHostItem.ToUpper()): Does not have Virtual Machine." -WriteToLogFile $True
         Start-Sleep -Seconds 3
     }
 
     # If detected clustered VM configuration resource problem
-    if ($offlineVmConfigs)
-    {
-        ForEach ($offlineVmConfig in $offlineVmConfigs)
-        {
+    if ($offlineVmConfigs) {
+        ForEach ($offlineVmConfig in $offlineVmConfigs) {
             # Table TR Color
-            if([bool]!($vmNoInTable%2))
-            {
-               #Even or Zero
-               $vmTableTrBgColor = ""
+            if ([bool]!($vmNoInTable % 2)) {
+                #Even or Zero
+                $vmTableTrBgColor = ""
             }
-            else
-            {
-               #Odd
-               $vmTableTrBgColor = "#F9F9F9"
+            else {
+                #Odd
+                $vmTableTrBgColor = "#F9F9F9"
             }
 
-            $outVMTable +="
+            $outVMTable += "
             <tr style=""background:$($vmTableTrBgColor)""><!--Data Line-->
                 <td><p style=""text-align:left""><abbr title=""Virtual Machine Configuration resource is $($offlineVmConfig.State)"">$($offlineVmConfig.OwnerGroup) <span style=""font-size:10px;color:orange"">*</span></abbr> <br><span style=""font-size:10px;color:#BDBDBD"">IsClustered:Yes</span></p></td>
                 <td bgcolor=""$($stateBgColors[3])""><p style=""color:$($stateWordColors[3])"">$($offlineVmConfig.State)</p></td>
@@ -2493,24 +2281,22 @@ ForEach ($VMHostItem in $VMHosts) {
     }
 }
 
-if (($HighlightsOnly -eq $true) -and ($outVmTable -eq $null) -and ($cntVM -ne 0))
-{
-    $outVmTable +="
+if (($HighlightsOnly -eq $true) -and ($outVmTable -eq $null) -and ($cntVM -ne 0)) {
+    $outVmTable += "
             <tr><!--Data Line-->
                 <td colspan=""14""><p style=""text-align:center""><span style=""padding-top:1px;padding-bottom:1px;background-color:#ACFA58;color:#298A08"">&nbsp;&nbsp;All VMs are healthy&nbsp;&nbsp;</span></p></td>
             </tr>"
 }
 
-if (($outVmTable -eq $null) -and ($cntVM -eq 0))
-{
-    $outVmTable +="
+if (($outVmTable -eq $null) -and ($cntVM -eq 0)) {
+    $outVmTable += "
             <tr><!--Data Line-->
                 <td colspan=""14""><p style=""text-align:center""><span style=""color:#BDBDBD"">No virtual machine for reporting</span></p></td>
             </tr>"
 }
 
 # VMs Table - End
-$outVMTableEnd ="
+$outVMTableEnd = "
         </tbody>
         </table>
     </div><!--End VMs Class-->"
@@ -2524,7 +2310,7 @@ $outVMTableEnd ="
 sPrint -Type 1 "Gathering Disk/Volume information..." -WriteToLogFile $True
 
 # Disks-Volumes-Table Header
-    $outVolumeTableStart += "
+$outVolumeTableStart += "
     <div class=""Disks-Volumes""><!--Start Disks-Volumes Class-->
         <h2>$($volumeTableCaption)</h2><br>
         <table id=""Disks-Volumes-Table"">
@@ -2552,46 +2338,38 @@ if ($Cluster) {
     $ovTotalStorage = 0
 
     # Check and get WMI Data
-    $clusResourceDiskData = sGet-Wmi -ComputerName $clusterName -Namespace root\MSCluster -Class MSCluster_Resource -AI -Filter "Type='Physical Disk'"
+    $clusResourceDiskData = Get-WmiExt -ComputerName $clusterName -Namespace root\MSCluster -Class MSCluster_Resource -AI -Filter "Type='Physical Disk'"
 
-    if ($clusResourceDiskData[1] -eq 1)
-    {
+    if ($clusResourceDiskData[1] -eq 1) {
         $clusResourceDiskData = $clusResourceDiskData[0] | Sort-Object
         $clusResourceToDiskData = gwmi -ComputerName $clusterName -Namespace root\MSCluster -Class MSCluster_ResourceToDisk -Authentication PacketPrivacy -Impersonation Impersonate
         $clusDiskToDiskPartitionData = gwmi -ComputerName $clusterName -Namespace root\MSCluster -Class MSCluster_DiskToDiskPartition -Authentication PacketPrivacy -Impersonation Impersonate
         $clusDiskPartitionData = gwmi -ComputerName $clusterName -Namespace root\MSCluster -Class MSCluster_DiskPartition -Authentication PacketPrivacy -Impersonation Impersonate
-        $msftDiskData = gwmi -ComputerName $clusterName -Namespace root\Microsoft\Windows\Storage -Class MSFT_Disk | where{$_.IsClustered -eq $true}
+        $msftDiskData = gwmi -ComputerName $clusterName -Namespace root\Microsoft\Windows\Storage -Class MSFT_Disk | Where-Object { $_.IsClustered -eq $true }
         $msClusterData = gwmi -ComputerName $clusterName -Namespace root\MSCluster -Class MSCluster_Cluster -Authentication PacketPrivacy -Impersonation Impersonate
 
         # If Quorum disk exists, determine the drive letter
-        if ($msClusterData.QuorumTypeValue -eq 3)
-        {
-            if ($msClusterData.QuorumPath)
-            {
-                $quorumPathLetter = ($msClusterData.QuorumPath).Substring(0,2)
+        if ($msClusterData.QuorumTypeValue -eq 3) {
+            if ($msClusterData.QuorumPath) {
+                $quorumPathLetter = ($msClusterData.QuorumPath).Substring(0, 2)
             }
-            else
-            {
+            else {
                 $quorumPathLetter = $null
             }
         }
-        else
-        {
+        else {
             $quorumPathLetter = $null
         }
 
         # Each Cluster Disk Resource
-        foreach($clusterDisk in $clusResourceDiskData)
-        {
+        foreach ($clusterDisk in $clusResourceDiskData) {
             $highL = $false
             $chargerVolumeTable = $null
 
             # Cluster Disk State, If...
-            if ($clusterDisk.State -eq 2) # Online
-            {
+            if ($clusterDisk.State -eq 2) { # Online
                 # IsClusterSharedVolume True
-                if ($clusterDisk.IsClusterSharedVolume -eq $true)
-                {
+                if ($clusterDisk.IsClusterSharedVolume -eq $true) {
                     # Clear
                     $clusResourceRELPATH = $null
                     $clusDiskID = $null
@@ -2600,43 +2378,41 @@ if ($Cluster) {
 
                     # Get DiskID and CSV Paths
                     $clusResourceRELPATH = $clusterDisk.__RELPATH
-                    $clusDiskID = ($clusResourceToDiskData | where{$_.GroupComponent -eq $clusResourceRELPATH}).PartComponent
+                    $clusDiskID = ($clusResourceToDiskData | Where-Object { $_.GroupComponent -eq $clusResourceRELPATH }).PartComponent
                     $shortClusDiskID = $clusDiskID.TrimStart("MSCluster_Disk.Id=`"").TrimEnd("`"")
 
                     # Get physical disk information form MSFT_Disk
-                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).BusType
-                    $diskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).PartitionStyle
-                    $clusterDiskSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).Size -DiskVolumeSpaceUnit byte
-                    $clusterDiskAllocatedSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).AllocatedSize byte
-                    $clusterDiskUnAllocatedSize = sConvert-Size -DiskVolumeSpace (($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).Size - ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).AllocatedSize) -DiskVolumeSpaceUnit byte
+                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
+                    $diskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).PartitionStyle
+                    $clusterDiskSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size -DiskVolumeSpaceUnit byte
+                    $clusterDiskAllocatedSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize byte
+                    $clusterDiskUnAllocatedSize = sConvert-Size -DiskVolumeSpace (($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size - ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize) -DiskVolumeSpaceUnit byte
                     
                     # If maintenance mode enabled
-                    if ($clusterDisk.StatusInformation -eq 1)
-                    {
-                        $clusDiskPartitionPaths = ((($clusDiskToDiskPartitionData | where{$_.GroupComponent -eq $clusDiskID}).PartComponent) -replace "MSCluster_DiskPartition.Path=`"","").TrimEnd("`"")
+                    if ($clusterDisk.StatusInformation -eq 1) {
+                        $clusDiskPartitionPaths = ((($clusDiskToDiskPartitionData | Where-Object { $_.GroupComponent -eq $clusDiskID }).PartComponent) -replace "MSCluster_DiskPartition.Path=`"", "").TrimEnd("`"")
                         $clusDiskVolumeData = Get-ClusterSharedVolume -Cluster $ClusterName -Name $clusterDisk.Name
 
-                        foreach($clusDiskPartitionPath in $clusDiskPartitionPaths)
-                        {
+                        foreach ($clusDiskPartitionPath in $clusDiskPartitionPaths) {
                             $outDiskName = $clusterDisk.Name
-                            $outVolumePath = ($clusDiskVolumeData.SharedVolumeInfo | where{$_.Partition.Name -eq $clusDiskPartitionPath}).FriendlyVolumeName
+                            $outVolumePath = ($clusDiskVolumeData.SharedVolumeInfo | Where-Object { $_.Partition.Name -eq $clusDiskPartitionPath }).FriendlyVolumeName
                             $outVolumeName = $outVolumePath.Split("\")[-1]
-                            $outVolumeFS = (($clusDiskVolumeData.SharedVolumeInfo.Partition) | where{$_.Name -eq $clusDiskPartitionPath}).FileSystem
-                            $outDiskState = "Maintenance","#BDD7EE","#204F7A"
+                            $outVolumeFS = (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).FileSystem
+                            $outDiskState = "Maintenance", "#BDD7EE", "#204F7A"
                             $outDiskOwner = $clusterDisk.OwnerNode
                             $outBusType = $busTypeName
                             $outDiskPartStyle = $diskPartitionStyle
-                            $outVolumeTotalSize = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | where{$_.Name -eq $clusDiskPartitionPath}).Size -DiskVolumeSpaceUnit byte
-                            $outVolumeFreeSpace = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | where{$_.Name -eq $clusDiskPartitionPath}).FreeSpace -DiskVolumeSpaceUnit byte
-                            $outVolumeUsedSpace = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | where{$_.Name -eq $clusDiskPartitionPath}).UsedSpace -DiskVolumeSpaceUnit byte
-                            $volumeFreePercent = [math]::Round((($clusDiskVolumeData.SharedVolumeInfo.Partition) | where{$_.Name -eq $clusDiskPartitionPath}).PercentFree)
+                            $outVolumeTotalSize = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).Size -DiskVolumeSpaceUnit byte
+                            $outVolumeFreeSpace = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).FreeSpace -DiskVolumeSpaceUnit byte
+                            $outVolumeUsedSpace = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).UsedSpace -DiskVolumeSpaceUnit byte
+                            $volumeFreePercent = [math]::Round((($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).PercentFree)
                             $outVolumeFreePercent = "&nbsp;~%" + $volumeFreePercent + " free&nbsp;"
                             $outVolumeUsage = "CSV"
                                 
                             # Volume Free Space Colors
                             $volumeFreeSpaceColors = sConvert-VolumeSizeColors -FreePercent $volumeFreePercent
                              
-                            $outVolumeTable +="
+                            $outVolumeTable += "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left""><abbr title=""$($outVolumePath)"">$($outVolumeName) <span style=""font-size:10px;color:orange"">*</span></abbr><br><span style=""font-size:10px;color:#BDBDBD;text-align:left""><abbr title=""PhysicalSize: $($clusterDiskSize) | Allocated: $($clusterDiskAllocatedSize) | Unallocated: ~$($clusterDiskUnAllocatedSize)"">$($outDiskName) <span style=""font-size:10px;color:orange"">*</span></abbr></span></p></td>
                 <td bgcolor=""$($outDiskState[1])""><p style=""color:$($outDiskState[2])"">$($outDiskState[0])</p></td>
@@ -2652,30 +2428,27 @@ if ($Cluster) {
             </tr>"
                         }
                     }
-                    else
-                    {
-                        $clusDiskPartitionPaths = (($clusDiskToDiskPartitionData | where{$_.GroupComponent -eq $clusDiskID}).PartComponent).TrimStart("MSCluster_DiskPartition.Path=`"\\\\?\\Volume").TrimEnd("\\`"")
+                    else {
+                        $clusDiskPartitionPaths = (($clusDiskToDiskPartitionData | Where-Object { $_.GroupComponent -eq $clusDiskID }).PartComponent).TrimStart("MSCluster_DiskPartition.Path=`"\\\\?\\Volume").TrimEnd("\\`"")
   
-                        foreach($clusDiskPartitionPath in $clusDiskPartitionPaths)
-                        {
+                        foreach ($clusDiskPartitionPath in $clusDiskPartitionPaths) {
                             $highL = $false
                             $outDiskName = $clusterDisk.Name
-                            $outVolumePath = ($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).MountPoints
-                            $outVolumeName = (($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).MountPoints).Split("\")[-1]
-                            $outVolumeLabel = ($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).VolumeLabel
-                            $outVolumeFS = ($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).FileSystem
+                            $outVolumePath = ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).MountPoints
+                            $outVolumeName = (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).MountPoints).Split("\")[-1]
+                            $outVolumeLabel = ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).VolumeLabel
+                            $outVolumeFS = ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FileSystem
                             $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
-                                if ($outDiskState[0] -ne "Online")
-                                {
-                                    $highL = $true
-                                }
+                            if ($outDiskState[0] -ne "Online") {
+                                $highL = $true
+                            }
                             $outDiskOwner = $clusterDisk.OwnerNode
                             $outBusType = $busTypeName
                             $outDiskPartStyle = $diskPartitionStyle
-                            $outVolumeTotalSize = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).TotalSize) -DiskVolumeSpaceUnit mb)
-                            $outVolumeFreeSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).FreeSpace) -DiskVolumeSpaceUnit mb)
-                            $outVolumeUsedSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).TotalSize - ($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).FreeSpace) -DiskVolumeSpaceUnit mb)
-                            $volumeFreePercent = [math]::Round((((($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).FreeSpace) / (($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).TotalSize))) * 100)
+                            $outVolumeTotalSize = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize) -DiskVolumeSpaceUnit mb)
+                            $outVolumeFreeSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                            $outVolumeUsedSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                            $volumeFreePercent = [math]::Round((((($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) / (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize))) * 100)
                             $outVolumeFreePercent = "&nbsp;~%" + $volumeFreePercent + " free&nbsp;"
                             $outVolumeUsage = "CSV"
                                 
@@ -2683,11 +2456,10 @@ if ($Cluster) {
                             $volumeFreeSpaceColors = sConvert-VolumeSizeColors -FreePercent $volumeFreePercent
 
                             # For Cluster Overview
-                            $ovUsedStorage = $ovUsedStorage + (($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).TotalSize - ($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).FreeSpace)
-                            $ovTotalStorage = $ovTotalStorage + ($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).TotalSize
+                            $ovUsedStorage = $ovUsedStorage + (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace)
+                            $ovTotalStorage = $ovTotalStorage + ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize
                             
-                            if ($volumeFreePercent -le 10)
-                            {
+                            if ($volumeFreePercent -le 10) {
                                 $highL = $true
                             }
 
@@ -2695,34 +2467,30 @@ if ($Cluster) {
                             $outActiveVHD = $null
                             $chargerActiveVhd = $null
 
-                            $chargerActiveVhd = $activeVhds | where{$_.Path -like "$outVolumePath*"}
+                            $chargerActiveVhd = $activeVhds | Where-Object { $_.Path -like "$outVolumePath*" }
 
-                            if ($chargerActiveVhd)
-                            {
+                            if ($chargerActiveVhd) {
                                 $activeVhdCount = $chargerActiveVhd.Count
-                                $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | measure -Sum).Sum -DiskVolumeSpaceUnit byte
-                                $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | measure -Sum).Sum -DiskVolumeSpaceUnit byte
+                                $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                                $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
 
                                 # Color
-                                if ((($chargerActiveVhd.Size | measure -Sum).Sum)/1024/1024 -gt ($clusDiskPartitionData | where{$_.Path -match $clusDiskPartitionPath}).TotalSize)
-                                {
-                                    $activeVhdTotalFileSizeColor = "#9C6500","#FBD95B"
+                                if ((($chargerActiveVhd.Size | Measure-Object -Sum).Sum) / 1024 / 1024 -gt ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize) {
+                                    $activeVhdTotalFileSizeColor = "#9C6500", "#FBD95B"
                                     $highL = $true
                                 }
-                                else
-                                {
-                                    $activeVhdTotalFileSizeColor = "#BDBDBD",""                               
+                                else {
+                                    $activeVhdTotalFileSizeColor = "#BDBDBD", ""                               
                                 }
 
                                 $outActiveVHD = "<p style=""line-height:1.2""><abbr title=""Total number of active VHDs in this volume"">$($activeVhdCount)</abbr><br><span style=""font-size:10px;color:#BDBDBD""><abbr title=""Total of current file size of active VHDs"">$($activeVhdTotalFileSize[0])$($activeVhdTotalFileSize[1])<span style=""font-size:10px;color:orange"">*</span></abbr> / </span><abbr title=""Total of maximum disk size of active VHDs""><span style=""font-size:10px;background-color:$($activeVhdTotalFileSizeColor[1]);color:$($activeVhdTotalFileSizeColor[0])"">$($activeVhdTotalDiskSize[0])$($activeVhdTotalDiskSize[1])<span style=""font-size:10px;color:orange"">*</span></span></abbr></p>"
                             }
-                            else
-                            {
+                            else {
                                 $outActiveVHD = "<p>0</p>"
                             }
 
                             # Data Line
-                            $chargerVolumeTable ="
+                            $chargerVolumeTable = "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left""><abbr title=""$($outVolumePath)"">$($outVolumeName) <span style=""font-size:10px;color:orange"">*</span></abbr><br><span style=""font-size:10px;color:#BDBDBD;text-align:left""><abbr title=""PhysicalSize: $($clusterDiskSize) | Allocated: $($clusterDiskAllocatedSize) | Unallocated: ~$($clusterDiskUnAllocatedSize)"">$($outDiskName) <span style=""font-size:10px;color:orange"">*</span></abbr></span></p></td>
                 <td bgcolor=""$($outDiskState[1])""><p style=""color:$($outDiskState[2])"">$($outDiskState[0])</p></td>
@@ -2737,23 +2505,19 @@ if ($Cluster) {
                 <td><p style=""line-height:1.2"">$($outVolumeTotalSize[0])<span style=""font-size:10px""> $($outVolumeTotalSize[1])</span><br><span style=""font-size:10px;background-color:$($volumeFreeSpaceColors[1]);color:$($volumeFreeSpaceColors[2])"">$outVolumeFreePercent</span></p></td>
             </tr>"
                             # Add to HTML Table
-                            if ($HighlightsOnly -eq $false)
-                            {
+                            if ($HighlightsOnly -eq $false) {
                                 $outVolumeTable += $chargerVolumeTable
                             }
-                            elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true))
-                            {
+                            elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true)) {
                                 $outVolumeTable += $chargerVolumeTable
                             }
-                            else
-                            {
+                            else {
                                 # Blank
                             }
                         }
                     } 
                 }
-                else # IsClusterSharedVolume False
-                {
+                else { # IsClusterSharedVolume False
                     # Clear
                     $clusResourceRELPATH = $null
                     $clusDiskID = $null
@@ -2762,23 +2526,21 @@ if ($Cluster) {
 
                     # Get DiskID and Partition Paths (drives)
                     $clusResourceRELPATH = $clusterDisk.__RELPATH
-                    $clusDiskID = ($clusResourceToDiskData | where{$_.GroupComponent -eq $clusResourceRELPATH}).PartComponent
+                    $clusDiskID = ($clusResourceToDiskData | Where-Object { $_.GroupComponent -eq $clusResourceRELPATH }).PartComponent
                     $shortClusDiskID = $clusDiskID.TrimStart("MSCluster_Disk.Id=`"").TrimEnd("`"")
-                    $clusDiskPartitionPaths = ($clusDiskToDiskPartitionData | where{$_.GroupComponent -eq $clusDiskID}).PartComponent
+                    $clusDiskPartitionPaths = ($clusDiskToDiskPartitionData | Where-Object { $_.GroupComponent -eq $clusDiskID }).PartComponent
 
                     # Get physical disk information form MSFT_Disk
-                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).BusType
-                    $diskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).PartitionStyle
-                    $clusterDiskSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).Size -DiskVolumeSpaceUnit byte
-                    $clusterDiskAllocatedSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).AllocatedSize byte
-                    $clusterDiskUnAllocatedSize = sConvert-Size -DiskVolumeSpace (($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).Size - ($msftDiskData | where{(($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID))}).AllocatedSize) -DiskVolumeSpaceUnit byte
+                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
+                    $diskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).PartitionStyle
+                    $clusterDiskSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size -DiskVolumeSpaceUnit byte
+                    $clusterDiskAllocatedSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize byte
+                    $clusterDiskUnAllocatedSize = sConvert-Size -DiskVolumeSpace (($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size - ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize) -DiskVolumeSpaceUnit byte
 
                     # If partition(s) on physical disk exists
-                    if ($clusDiskPartitionPaths)
-                    {
+                    if ($clusDiskPartitionPaths) {
                         # Get partition (volume) information
-                        foreach ($clusDiskPartitionPath in $clusDiskPartitionPaths)
-                        {
+                        foreach ($clusDiskPartitionPath in $clusDiskPartitionPaths) {
                             $highL = $false
                             $assignedPT = $false
                             $driveLetterExist = $true
@@ -2789,111 +2551,95 @@ if ($Cluster) {
                             $outDiskPartStyle = $diskPartitionStyle
 
                             # Disk State
-                            if ($clusterDisk.StatusInformation -eq 1)
-                            {
+                            if ($clusterDisk.StatusInformation -eq 1) {
                                 # In maintenance mode
-                                $outDiskState = "Maintenance","#BDD7EE","#204F7A"
+                                $outDiskState = "Maintenance", "#BDD7EE", "#204F7A"
                             }
-                            else
-                            {
+                            else {
                                 $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
                             }
 
-                            if ($outDiskState[0] -ne "Online")
-                            {
+                            if ($outDiskState[0] -ne "Online") {
                                 $highL = $true
                             }
 
-                            $outVolumeLabel = ($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).VolumeLabel
-                            $outVolumeFS = ($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).FileSystem
+                            $outVolumeLabel = ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).VolumeLabel
+                            $outVolumeFS = ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FileSystem
                         
                         
                             # Volume Name
-                            if ($clusDiskPartitionPath -match "Volume")
-                            {
+                            if ($clusDiskPartitionPath -match "Volume") {
                                 # Missing Volume (drive) Letter
                                 $outVolumeName = "<span style=""background-color:$($stateBgColors[4]);color:$($stateWordColors[4])"">&nbsp;No Letter&nbsp;</span>"
                                 $highL = $true
                                 $driveLetterExist = $false
                             }
-                            elseif ($clusDiskPartitionPath -match "GLOBALROOT")
-                            {
+                            elseif ($clusDiskPartitionPath -match "GLOBALROOT") {
                                 # PT
                                 $outVolumeName = "PT Disk"
                                 $outVolumeLabel = "Assigned to '$($clusterDisk.OwnerGroup)' as a pass-through disk"
                                 $outVolumeFS = "-"
                                 $assignedPT = $true
                             }
-                            else
-                            {
-                                $outVolumeName = ($clusDiskPartitionPath -replace "MSCluster_DiskPartition.Path=`"","").TrimEnd("`"")
+                            else {
+                                $outVolumeName = ($clusDiskPartitionPath -replace "MSCluster_DiskPartition.Path=`"", "").TrimEnd("`"")
                             }
 
                             # Volume Usage Type
-                            if ($outVolumeName -eq $quorumPathLetter)
-                            {
+                            if ($outVolumeName -eq $quorumPathLetter) {
                                 $outVolumeUsage = "Quorum"
                             }
-                            elseif ($assignedPT -eq $True)
-                            {
+                            elseif ($assignedPT -eq $True) {
                                 $outVolumeUsage = "Pass-through"
                             }
-                            else
-                            {
+                            else {
                                 $outVolumeUsage = "Volume"
                             }
                             
                             # Volume Info
-                            if (!$assignedPT)
-                            {
-                                $outVolumeTotalSize = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).TotalSize) -DiskVolumeSpaceUnit mb)
-                                $outVolumeFreeSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).FreeSpace) -DiskVolumeSpaceUnit mb)
-                                $outVolumeUsedSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).TotalSize - ($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).FreeSpace) -DiskVolumeSpaceUnit mb)
-                                $volumeFreePercent = [math]::Round((((($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).FreeSpace) / (($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).TotalSize))) * 100)
+                            if (!$assignedPT) {
+                                $outVolumeTotalSize = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize) -DiskVolumeSpaceUnit mb)
+                                $outVolumeFreeSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                                $outVolumeUsedSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                                $volumeFreePercent = [math]::Round((((($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) / (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize))) * 100)
                                 $outVolumeFreePercent = "&nbsp;~%" + $volumeFreePercent + " free&nbsp;"
 
                                 # For Cluster Overview
-                                if(($outVolumeUsage -eq "Volume") -and ($clusterDisk.StatusInformation -ne 1) -and ($driveLetterExist -eq $true))
-                                {
-                                    $ovUsedStorage = $ovUsedStorage + (($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).TotalSize - ($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).FreeSpace)
-                                    $ovTotalStorage = $ovTotalStorage + ($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).TotalSize
+                                if (($outVolumeUsage -eq "Volume") -and ($clusterDisk.StatusInformation -ne 1) -and ($driveLetterExist -eq $true)) {
+                                    $ovUsedStorage = $ovUsedStorage + (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace)
+                                    $ovTotalStorage = $ovTotalStorage + ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize
                                 }
 
                                 # Active VHD
                                 $outActiveVHD = $null
                                 $chargerActiveVhd = $null
 
-                                $chargerActiveVhd = $activeVhds | where{($_.Path -like "$outVolumeName*") -and ($_.Host -eq $clusterDisk.OwnerNode)}
+                                $chargerActiveVhd = $activeVhds | Where-Object { ($_.Path -like "$outVolumeName*") -and ($_.Host -eq $clusterDisk.OwnerNode) }
 
-                                if ($chargerActiveVhd)
-                                {
+                                if ($chargerActiveVhd) {
                                     $activeVhdCount = $chargerActiveVhd.Count
-                                    $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | measure -Sum).Sum -DiskVolumeSpaceUnit byte
-                                    $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | measure -Sum).Sum -DiskVolumeSpaceUnit byte
+                                    $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                                    $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
 
                                     # Color
-                                    if ((($chargerActiveVhd.Size | measure -Sum).Sum)/1024/1024 -gt ($clusDiskPartitionData | where{$_.__RELPATH -eq $clusDiskPartitionPath}).TotalSize)
-                                    {
-                                        $activeVhdTotalFileSizeColor = "#9C6500","#FBD95B"
+                                    if ((($chargerActiveVhd.Size | Measure-Object -Sum).Sum) / 1024 / 1024 -gt ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize) {
+                                        $activeVhdTotalFileSizeColor = "#9C6500", "#FBD95B"
                                         $highL = $true
                                     }
-                                    else
-                                    {
-                                        $activeVhdTotalFileSizeColor = "#BDBDBD",""                                    
+                                    else {
+                                        $activeVhdTotalFileSizeColor = "#BDBDBD", ""                                    
                                     }
 
                                     $outActiveVHD = "<p style=""line-height:1.2""><abbr title=""Total number of active VHDs in this volume"">$($activeVhdCount)</abbr><br><span style=""font-size:10px;color:#BDBDBD""><abbr title=""Total of current file size of active VHDs"">$($activeVhdTotalFileSize[0])$($activeVhdTotalFileSize[1])<span style=""font-size:10px;color:orange"">*</span></abbr> / </span><abbr title=""Total of maximum disk size of active VHDs""><span style=""font-size:10px;background-color:$($activeVhdTotalFileSizeColor[1]);color:$($activeVhdTotalFileSizeColor[0])"">$($activeVhdTotalDiskSize[0])$($activeVhdTotalDiskSize[1])<span style=""font-size:10px;color:orange"">*</span></span></abbr></p>"
                                 }
-                                else
-                                {
+                                else {
                                     $outActiveVHD = "<p>0</p>"
                                 }
                             }
-                            else
-                            {
-                                $outVolumeTotalSize = "-",""
-                                $outVolumeFreeSpace = "-",""
-                                $outVolumeUsedSpace = "-",""
+                            else {
+                                $outVolumeTotalSize = "-", ""
+                                $outVolumeFreeSpace = "-", ""
+                                $outVolumeUsedSpace = "-", ""
                                 $volumeFreePercent = 100
                                 $outVolumeFreePercent = $null
                                 $outActiveVHD = "<p>-</p>"
@@ -2902,8 +2648,7 @@ if ($Cluster) {
                             # Volume Free Space Colors
                             $volumeFreeSpaceColors = sConvert-VolumeSizeColors -FreePercent $volumeFreePercent
 
-                            if ($volumeFreePercent -le 10)
-                            {
+                            if ($volumeFreePercent -le 10) {
                                 $highL = $true
                             }
 
@@ -2922,27 +2667,22 @@ if ($Cluster) {
                 <td><p style=""line-height:1.2"">$($outVolumeTotalSize[0])<span style=""font-size:10px""> $($outVolumeTotalSize[1])</span><br><span style=""font-size:10px;background-color:$($volumeFreeSpaceColors[1]);color:$($volumeFreeSpaceColors[2])"">$outVolumeFreePercent</span></p></td>
             </tr>"
                             # Add to HTML Table
-                            if ($HighlightsOnly -eq $false)
-                            {
+                            if ($HighlightsOnly -eq $false) {
                                 $outVolumeTable += $chargerVolumeTable
                             }
-                            elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true))
-                            {
+                            elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true)) {
                                 $outVolumeTable += $chargerVolumeTable
                             }
-                            else
-                            {
+                            else {
                                 # Blank
                             }
 
-                            if ($assignedPT -eq $True)
-                            {
+                            if ($assignedPT -eq $True) {
                                 Break
                             }
                         }
                     }
-                    else
-                    {
+                    else {
                         $highL = $false
 
                         $outDiskName = $clusterDisk.Name
@@ -2951,30 +2691,25 @@ if ($Cluster) {
                         $outDiskPartStyle = $diskPartitionStyle
 
                         # Disk State
-                        if ($clusterDisk.StatusInformation -eq 1)
-                        {
+                        if ($clusterDisk.StatusInformation -eq 1) {
                             # In maintenance mode
-                            $outDiskState = "Maintenance","#BDD7EE","#204F7A"
+                            $outDiskState = "Maintenance", "#BDD7EE", "#204F7A"
                         }
-                        else
-                        {
+                        else {
                             $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
                         }
 
-                        if ($outDiskState[0] -ne "Online")
-                        {
+                        if ($outDiskState[0] -ne "Online") {
                             $highL = $true
                         }
 
                         # OwnerGroup
-                        if ($clusterDisk.OwnerGroup -eq "Available Storage")
-                        {
+                        if ($clusterDisk.OwnerGroup -eq "Available Storage") {
                             $outVolumeName = "Unassigned Disk"
                             $outVolumeUsage = "Unassigned"
                             $outVolumeLabel = "This clustered disk has not assigned for any purpose"
                         }
-                        else
-                        {
+                        else {
                             $outVolumeName = "PT Disk"
                             $outVolumeUsage = "Pass-through"
                             $outVolumeLabel = "Assigned to '$($clusterDisk.OwnerGroup)' as a pass-through disk"
@@ -2982,12 +2717,12 @@ if ($Cluster) {
 
                         # Volume
                         $outVolumeFS = "-"
-                        $outVolumeTotalSize = "-",""
-                        $outVolumeFreeSpace = "-",""
-                        $outVolumeUsedSpace = "-",""
+                        $outVolumeTotalSize = "-", ""
+                        $outVolumeFreeSpace = "-", ""
+                        $outVolumeUsedSpace = "-", ""
                         $volumeFreePercent = ""
                         $outVolumeFreePercent = $null
-                        $volumeFreeSpaceColors = "","",""
+                        $volumeFreeSpaceColors = "", "", ""
 
                         $chargerVolumeTable = "
             <tr><!--Data Line-->
@@ -3004,30 +2739,25 @@ if ($Cluster) {
                 <td><p style=""line-height:1.2"">$($outVolumeTotalSize[0])<span style=""font-size:10px""> $($outVolumeTotalSize[1])</span><br><span style=""font-size:10px;background-color:$($volumeFreeSpaceColors[1]);color:$($volumeFreeSpaceColors[2])"">$outVolumeFreePercent</span></p></td>
             </tr>"
                         # Add to HTML Table
-                        if ($HighlightsOnly -eq $false)
-                        {
+                        if ($HighlightsOnly -eq $false) {
                             $outVolumeTable += $chargerVolumeTable
                         }
-                        elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true))
-                        {
+                        elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true)) {
                             $outVolumeTable += $chargerVolumeTable
                         }
-                        else
-                        {
+                        else {
                             # Blank
                         }
                     } 
                 }
             }
-            elseif (($clusterDisk.State -eq 3) -or ($clusterDisk.State -eq 127)) # Offline
-            {
-                if ($HighlightsOnly -eq $false)
-                {
+            elseif (($clusterDisk.State -eq 3) -or ($clusterDisk.State -eq 127)) { # Offline
+                if ($HighlightsOnly -eq $false) {
                     $outDiskName = $clusterDisk.Name
                     $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
                     $outDiskOwner = $clusterDisk.OwnerNode
 
-                    $outVolumeTable +="
+                    $outVolumeTable += "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left""><abbr title=""Disk is Offline"">$outDiskName <span style=""font-size:10px;color:orange"">*</span></abbr><br><span style=""font-size:10px;color:#BDBDBD;text-align:left"">Unknown Volume</span></p></td>
                 <td bgcolor=""$($outDiskState[1])""><p style=""color:$($outDiskState[2])"">$($outDiskState[0])</p></td>
@@ -3043,13 +2773,12 @@ if ($Cluster) {
             </tr>"
                 }
             }
-            elseif (($clusterDisk.State -eq 4) -or ($clusterDisk.State -eq 126)) # Failed
-            {
+            elseif (($clusterDisk.State -eq 4) -or ($clusterDisk.State -eq 126)) { # Failed
                 $outDiskName = $clusterDisk.Name
                 $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
                 $outDiskOwner = $clusterDisk.OwnerNode
 
-                $outVolumeTable +="
+                $outVolumeTable += "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left""><abbr title=""Disk is Failed"">$outDiskName <span style=""font-size:10px;color:orange"">*</span></abbr><br><span style=""font-size:10px;color:#BDBDBD;text-align:left"">Unknown Volume</span></p></td>
                 <td bgcolor=""$($outDiskState[1])""><p style=""color:$($outDiskState[2])"">$($outDiskState[0])</p></td>
@@ -3064,13 +2793,12 @@ if ($Cluster) {
                 <td><p>-</p></td>
             </tr>"
             }
-            else # Others
-            {
+            else { # Others
                 $outDiskName = $clusterDisk.Name
                 $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
                 $outDiskOwner = $clusterDisk.OwnerNode
 
-                $outVolumeTable +="
+                $outVolumeTable += "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left""><abbr title=""Disk is Not Operational"">$outDiskName <span style=""font-size:10px;color:orange"">*</span></abbr><br><span style=""font-size:10px;color:#BDBDBD;text-align:left"">Unknown Volume</span></p></td>
                 <td bgcolor=""$($outDiskState[1])""><p style=""color:$($outDiskState[2])"">$($outDiskState[0])</p></td>
@@ -3087,18 +2815,16 @@ if ($Cluster) {
             }
         }
     }
-    elseif ($clusResourceDiskData[1] -eq 2)
-    {
-        $outVolumeTable +="
+    elseif ($clusResourceDiskData[1] -eq 2) {
+        $outVolumeTable += "
             <tr><!--Data Line-->
                 <td colspan=""11""><p style=""text-align:center;color:#BDBDBD"">Hyper-V Cluster does not have any Disk/Volume</p></td>
             </tr>"
     }
-    else
-    {
+    else {
         sPrint -Type 0 -Message "$ClusterName`: Gathering Disk/Volume information failed. $($clusResourceDiskData[0])" -WriteToLogFile $True
         Start-Sleep -Seconds 3
-        $outVolumeTable +="
+        $outVolumeTable += "
             <tr><!--Data Line-->
                 <td colspan=""11""><p style=""text-align:center;color:#BDBDBD"">$($clusResourceDiskData[0])</p></td>
             </tr>"
@@ -3106,17 +2832,14 @@ if ($Cluster) {
 }
 
 # Standalone
-if ($VMHost)
-{
+if ($VMHost) {
     $Computers = $VMHosts
     
-    foreach ($ComputerName in $Computers)
-    {
-        $LogicalDisks = sGet-Wmi -ComputerName $ComputerName -Namespace root\CIMv2 -Class Win32_LogicalDisk -AI -Filter "DriveType='3'"
-        if ($LogicalDisks[1] -eq 1)
-        {
+    foreach ($ComputerName in $Computers) {
+        $LogicalDisks = Get-WmiExt -ComputerName $ComputerName -Namespace root\CIMv2 -Class Win32_LogicalDisk -AI -Filter "DriveType='3'"
+        if ($LogicalDisks[1] -eq 1) {
             $LogicalDisks = $LogicalDisks[0]
-            $SystemDrive = ((gwmi -ComputerName $ComputerName -Class Win32_OperatingSystem).SystemDirectory).Substring(0,2)
+            $SystemDrive = ((gwmi -ComputerName $ComputerName -Class Win32_OperatingSystem).SystemDirectory).Substring(0, 2)
 
             # Get WMI Data
             $logicalToDiskPartitionData = gwmi -ComputerName $ComputerName Win32_LogicalDiskToPartition
@@ -3126,8 +2849,7 @@ if ($VMHost)
             $msftDiskData = gwmi -ComputerName $ComputerName -Namespace root\Microsoft\Windows\Storage -Class MSFT_Disk
 
             # Each logical disk
-            foreach ($LogicalDisk in $LogicalDisks)
-            {
+            foreach ($LogicalDisk in $LogicalDisks) {
                 $highL = $false
                 
                 # Clear variables
@@ -3139,13 +2861,13 @@ if ($VMHost)
                 $msftDisk = $null
 
                 # Filter for physical disk name
-                $logicalToDiskPartition = ($logicalToDiskPartitionData | where{$_.Dependent -eq $LogicalDisk.Path}).Antecedent
-                $physicalDiskPath = ($physicalDiskPathData | where{$_.Dependent -eq $logicalToDiskPartition}).Antecedent
-                $physicalDiskName = (($physicalDiskNameData | where{($_.Path).Path -eq $physicalDiskPath}).Name).Replace("\\.\PHYSICALDRIVE","Disk ")
+                $logicalToDiskPartition = ($logicalToDiskPartitionData | Where-Object { $_.Dependent -eq $LogicalDisk.Path }).Antecedent
+                $physicalDiskPath = ($physicalDiskPathData | Where-Object { $_.Dependent -eq $logicalToDiskPartition }).Antecedent
+                $physicalDiskName = (($physicalDiskNameData | Where-Object { ($_.Path).Path -eq $physicalDiskPath }).Name).Replace("\\.\PHYSICALDRIVE", "Disk ")
 
                 # Filter for other physical disk information
-                $msftDiskId = ($msftDiskIdData | where{$_.DriveLetter -eq ($LogicalDisk.DeviceID).TrimEnd(":")}).DiskId
-                $msftDisk = $msftDiskData | where{$_.ObjectId -eq $msftDiskId}
+                $msftDiskId = ($msftDiskIdData | Where-Object { $_.DriveLetter -eq ($LogicalDisk.DeviceID).TrimEnd(":") }).DiskId
+                $msftDisk = $msftDiskData | Where-Object { $_.ObjectId -eq $msftDiskId }
 
                 # Logical disk (volume) information
                 $outLogicalDiskName = $LogicalDisk.Name
@@ -3158,16 +2880,14 @@ if ($VMHost)
                 $outLogicalDiskFreePercent = "&nbsp;~%" + $LogicalDiskFreePercent + " free&nbsp;"
 
                 # Physical disk information
-                $outPhysicalDiskName = $physicalDiskName.Replace("PHYSICALDRIVE","Disk")
+                $outPhysicalDiskName = $physicalDiskName.Replace("PHYSICALDRIVE", "Disk")
                 $outMsftDiskSize = sConvert-Size -DiskVolumeSpace $msftDisk.Size -DiskVolumeSpaceUnit byte
                 $outMsftDiskAllocatedSize = sConvert-Size -DiskVolumeSpace $msftDisk.AllocatedSize -DiskVolumeSpaceUnit byte
 
-                if (($msftDisk.Size -eq $null) -and ($msftDisk.AllocatedSize -eq $null))
-                {
-                    $outmsftDiskUnallocatedSize = "N/A",""
+                if (($msftDisk.Size -eq $null) -and ($msftDisk.AllocatedSize -eq $null)) {
+                    $outmsftDiskUnallocatedSize = "N/A", ""
                 }
-                else
-                {
+                else {
                     $outmsftDiskUnallocatedSize = sConvert-Size -DiskVolumeSpace ($msftDisk.Size - $msftDisk.AllocatedSize) -DiskVolumeSpaceUnit byte
                 }
 
@@ -3177,19 +2897,16 @@ if ($VMHost)
                 $msftDiskOwner = ($ComputerName).ToUpper()
 
                 # Volume usage type
-                if ($LogicalDisk.Name -eq $SystemDrive)
-                {
+                if ($LogicalDisk.Name -eq $SystemDrive) {
                     $LogicalDiskUsage = "System"
                 }
-                else
-                {
+                else {
                     $LogicalDiskUsage = "Volume"
                 }
 
                 # Volume Free Space Colors
                 $LogicalDiskFreeSpaceColors = sConvert-VolumeSizeColors -FreePercent $LogicalDiskFreePercent
-                if ($LogicalDiskFreePercent -le 10)
-                {
+                if ($LogicalDiskFreePercent -le 10) {
                     $highL = $true
                 }
 
@@ -3197,34 +2914,30 @@ if ($VMHost)
                 $outActiveVHD = $null
                 $chargerActiveVhd = $null
 
-                $chargerActiveVhd = $activeVhds | where{($_.Path -like "$outLogicalDiskName*") -and ($_.Host -eq $msftDiskOwner)}
+                $chargerActiveVhd = $activeVhds | Where-Object { ($_.Path -like "$outLogicalDiskName*") -and ($_.Host -eq $msftDiskOwner) }
 
-                if ($chargerActiveVhd)
-                {
+                if ($chargerActiveVhd) {
                     $activeVhdCount = $chargerActiveVhd.Count
-                    $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | measure -Sum).Sum -DiskVolumeSpaceUnit byte
-                    $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | measure -Sum).Sum -DiskVolumeSpaceUnit byte
+                    $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                    $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
 
                     # Color
-                    if (($chargerActiveVhd.Size | measure -Sum).Sum -gt ($LogicalDisk.Size))
-                    {
-                        $activeVhdTotalFileSizeColor = "#9C6500","#FBD95B"
+                    if (($chargerActiveVhd.Size | Measure-Object -Sum).Sum -gt ($LogicalDisk.Size)) {
+                        $activeVhdTotalFileSizeColor = "#9C6500", "#FBD95B"
                         $highL = $true
                     }
-                    else
-                    {
-                        $activeVhdTotalFileSizeColor = "#BDBDBD",""                                    
+                    else {
+                        $activeVhdTotalFileSizeColor = "#BDBDBD", ""                                    
                     }
 
                     $outActiveVHD = "<p style=""line-height:1.2""><abbr title=""Total number of active VHDs in this volume"">$($activeVhdCount)</abbr><br><span style=""font-size:10px;color:#BDBDBD""><abbr title=""Total of current file size of active VHDs"">$($activeVhdTotalFileSize[0])$($activeVhdTotalFileSize[1])<span style=""font-size:10px;color:orange"">*</span></abbr> / </span><abbr title=""Total of maximum disk size of active VHDs""><span style=""font-size:10px;background-color:$($activeVhdTotalFileSizeColor[1]);color:$($activeVhdTotalFileSizeColor[0])"">$($activeVhdTotalDiskSize[0])$($activeVhdTotalDiskSize[1])<span style=""font-size:10px;color:orange"">*</span></span></abbr></p>"
                 }
-                else
-                {
+                else {
                     $outActiveVHD = "<p>0</p>"
                 }
 
                 # Data Line
-                $chargerVolumeTable ="
+                $chargerVolumeTable = "
             <tr><!--Data Line-->
                 <td><p style=""text-align:left""><abbr title=""$($outLogicalDiskVolumeName)"">$($outLogicalDiskName) <span style=""font-size:10px;color:orange"">*</span></abbr><br><span style=""font-size:10px;color:#BDBDBD;text-align:left""><abbr title=""PhysicalSize: $($outMsftDiskSize) | Allocated: $($outMsftDiskAllocatedSize) | Unallocated: ~$($outmsftDiskUnallocatedSize)"">$($outPhysicalDiskName) <span style=""font-size:10px;color:orange"">*</span></abbr></span></p></td>
                 <td bgcolor=""$($stateBgColors[1])""><p style=""color:$($stateWordColors[1])"">$($msftDiskState)</p></td>
@@ -3240,34 +2953,29 @@ if ($VMHost)
             </tr>"
                 
                 # Add to HTML Table
-                if ($HighlightsOnly -eq $false)
-                {
+                if ($HighlightsOnly -eq $false) {
                     $outVolumeTable += $chargerVolumeTable
                 }
-                elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true))
-                {
+                elseif (($HighlightsOnly -eq $true) -and ($highL -eq $true)) {
                     $outVolumeTable += $chargerVolumeTable
                 }
-                else
-                {
+                else {
                     # Blank
                 }
             }   
         }
-        elseif ($LogicalDisks[1] -eq 2)
-        {
-            $outVolumeTable +="
+        elseif ($LogicalDisks[1] -eq 2) {
+            $outVolumeTable += "
             <tr><!--Data Line-->
                 <td colspan=""11""><p style=""text-align:center;color:#BDBDBD"">$($ComputerName.ToUpper()) does not have any Disk/Volume</p></td>
             </tr>"
             Continue
         }
-        else
-        {
+        else {
             # Error
             sPrint -Type 0 -Message "$($ComputerName.ToUpper()): Gathering Disk/Volume information failed. $($LogicalDisks[0])" -WriteToLogFile $True
             Start-Sleep -Seconds 3
-            $outVolumeTable +="
+            $outVolumeTable += "
             <tr><!--Data Line-->
                 <td colspan=""11""><p style=""text-align:center;color:#BDBDBD"">$($LogicalDisks[0])</p></td>
             </tr>"
@@ -3276,18 +2984,15 @@ if ($VMHost)
     }
 }
 
-if ($outVolumeTable -eq $null)
-{
-    if ($Cluster)
-    {
-        $outVolumeTable +="
+if ($outVolumeTable -eq $null) {
+    if ($Cluster) {
+        $outVolumeTable += "
             <tr><!--Data Line-->
                 <td colspan=""11""><p style=""text-align:center""><span style=""padding-top:1px;padding-bottom:1px;background-color:#ACFA58;color:#298A08"">&nbsp;&nbsp;All Clustered Disks/Volumes are healthy&nbsp;&nbsp;</span></p></td>
             </tr>"
     }
-    else
-    {
-        $outVolumeTable +="
+    else {
+        $outVolumeTable += "
             <tr><!--Data Line-->
                 <td colspan=""11""><p style=""text-align:center""><span style=""padding-top:1px;padding-bottom:1px;background-color:#ACFA58;color:#298A08"">&nbsp;&nbsp;All Local Disks/Volumes are healthy&nbsp;&nbsp;</span></p></td>
             </tr>"
@@ -3295,7 +3000,7 @@ if ($outVolumeTable -eq $null)
 }
 
 # HTML Disk Table - End
-$outVolumeTableEnd ="
+$outVolumeTableEnd = "
         </tbody>
         </table>
     </div><!--End Disks-Volumes Class-->"
@@ -3305,31 +3010,31 @@ $outVolumeTableEnd ="
 #region Generate Cluster Overview Information
 #---------------
 
-if($ovTotalNode -eq $null){$ovTotalNode = 0}
-if($ovTotalVm -eq $null){$ovTotalVm = 0}
-if($ovRunningVm -eq $null){$ovRunningVm = 0}
-if($ovTotalLP -eq $null){$ovTotalLP = 0}
+if ($ovTotalNode -eq $null) { $ovTotalNode = 0 }
+if ($ovTotalVm -eq $null) { $ovTotalVm = 0 }
+if ($ovRunningVm -eq $null) { $ovRunningVm = 0 }
+if ($ovTotalLP -eq $null) { $ovTotalLP = 0 }
 
 $ovUsedMemory = sConvert-Size -DiskVolumeSpace $ovUsedMemory -DiskVolumeSpaceUnit kb
-    if($ovUsedMemory[0] -eq "N/A"){$ovUsedMemory = 0,"GB"}
+if ($ovUsedMemory[0] -eq "N/A") { $ovUsedMemory = 0, "GB" }
 $ovTotalMemory = sConvert-Size -DiskVolumeSpace $ovTotalMemory -DiskVolumeSpaceUnit kb
-    if($ovTotalMemory[0] -eq "N/A"){$ovTotalMemory = 0,"GB"}
+if ($ovTotalMemory[0] -eq "N/A") { $ovTotalMemory = 0, "GB" }
 $ovUsedStorage = sConvert-Size -DiskVolumeSpace $ovUsedStorage -DiskVolumeSpaceUnit mb
-    if($ovUsedStorage[0] -eq "N/A"){$ovUsedStorage = 0,"GB"}
+if ($ovUsedStorage[0] -eq "N/A") { $ovUsedStorage = 0, "GB" }
 $ovTotalStorage = sConvert-Size -DiskVolumeSpace $ovTotalStorage -DiskVolumeSpaceUnit mb
-    if($ovTotalStorage[0] -eq "N/A"){$ovTotalStorage = 0,"GB"}
+if ($ovTotalStorage[0] -eq "N/A") { $ovTotalStorage = 0, "GB" }
 $ovUsedVmMemory = sConvert-Size -DiskVolumeSpace $ovUsedVmMemory -DiskVolumeSpaceUnit byte
-    if($ovUsedVmMemory[0] -eq "N/A"){$ovUsedVmMemory = 0,"GB"}
+if ($ovUsedVmMemory[0] -eq "N/A") { $ovUsedVmMemory = 0, "GB" }
 $ovTotalVmMemory = sConvert-Size -DiskVolumeSpace $ovTotalVmMemory -DiskVolumeSpaceUnit byte
-    if($ovTotalVmMemory[0] -eq "N/A"){$ovTotalVmMemory = 0,"GB"}
+if ($ovTotalVmMemory[0] -eq "N/A") { $ovTotalVmMemory = 0, "GB" }
 $ovUsedVmVHD = sConvert-Size -DiskVolumeSpace $ovUsedVmVHD -DiskVolumeSpaceUnit byte
-    if($ovUsedVmVHD[0] -eq "N/A"){$ovUsedVmVHD = 0,"GB"}
+if ($ovUsedVmVHD[0] -eq "N/A") { $ovUsedVmVHD = 0, "GB" }
 $ovTotalVmVHD = sConvert-Size -DiskVolumeSpace $ovTotalVmVHD -DiskVolumeSpaceUnit byte
-    if($ovTotalVmVHD[0] -eq "N/A"){$ovTotalVmVHD = 0,"GB"}
+if ($ovTotalVmVHD[0] -eq "N/A") { $ovTotalVmVHD = 0, "GB" }
 
 $outClusterOverview = "
     <div class=""Overview""><!--Start Overview Class-->
-		<h2>Cluster Overview <span style=""font-size:16px;color:#BDBDBD"">(WCVRTXCLUSTER)</span></h2><br>
+		<h2>Cluster Overview <span style=""font-size:16px;color:#BDBDBD"">($($ClusterName))</span></h2><br>
 		<div class=""OverviewFrame"">
 			<table id=""Overview-Table"">
 			<br>
@@ -3392,9 +3097,9 @@ $outClusterOverview = "
 #region HTML End
 #---------------
 
-$outHtmlEnd ="
+$outHtmlEnd = "
 </div><!--End ReportBody-->
-<center><p style=""font-size:12px;color:#BDBDBD"">ScriptVersion: 1.6 | Based on more original script at https://github.com/ghostinthewires </p></center>
+<center><p style=""font-size:12px;color:#BDBDBD"">ScriptVersion: 1.6 | Based on original script at https://github.com/ghostinthewires </p></center>
 <br>
 </body>
 </html>"
@@ -3402,23 +3107,19 @@ $outHtmlEnd ="
 # Print MSG
 sPrint -Type 1 -Message "Writing output to file $ReportFile" -WriteToLogFile $True
 
-if ($Cluster)
-{
+if ($Cluster) {
     $outFullHTML = $outHtmlStart + $outClusterOverview + $outVMHostTableStart + $outVMHostTable + $outVMHostTableEnd + $outVolumeTableStart + $outVolumeTable + $outVolumeTableEnd + $outVMTableStart + $outVMTable + $outVMTableEnd + $outHtmlEnd
 }
-else
-{
+else {
     $outFullHTML = $outHtmlStart + $outVMHostTableStart + $outVMHostTable + $outVMHostTableEnd + $outVolumeTableStart + $outVolumeTable + $outVolumeTableEnd + $outVMTableStart + $outVMTable + $outVMTableEnd + $outHtmlEnd
 }
 
 $outFullHTML | Out-File $ReportFile
 
-if (Test-Path -Path $ReportFile)
-{
+if (Test-Path -Path $ReportFile) {
     sPrint -Type 1 -Message "Report created successfully." -WriteToLogFile $True
 }
-else
-{
+else {
     sPrint -Type 2 -Message "Reporting file could not be created. Please review the log file." -WriteToLogFile $True
 }
 
@@ -3427,10 +3128,8 @@ else
 #region Send Mail
 #---------------
 
-if ($SendMail -or $SMTPServer)
-{
-    if ($SMTPServer -and $MailFrom -and $MailTo)
-    {
+if ($SendMail -or $SMTPServer) {
+    if ($SMTPServer -and $MailFrom -and $MailTo) {
 
         sPrint -Type 1 -Message "Sending e-mail..." -WriteToLogFile $True
 
@@ -3444,43 +3143,38 @@ if ($SendMail -or $SMTPServer)
         $mailMessage.attachments.add($attachment)
         $smtp = New-Object System.Net.Mail.SmtpClient($SMTPServer, $SMTPPort)
 
-        if ($MailFromPassword)
-        {
+        if ($MailFromPassword) {
             $smtp.UseDefaultCredentials = $false
-            $smtp.Credentials = New-Object System.Net.NetworkCredential($MailFrom, $MailFromPassword)
+            $smtp.Credentials = New-Object System.Net.NetworkCredential($MailFrom, (ConvertFrom-SecureString $MailFromPassword -AsPlainText))
         }
         
-        if ($SMTPServerTLSorSSL)
-        {
+        if ($SMTPServerTLSorSSL) {
             $smtp.EnableSSL = $true
         }
         
         $smtpSendResult = 1
-        Try
-        {
+
+        try {
             $smtp.send($mailMessage)
         }
-        Catch
-        {
+        catch {
             sPrint -Type 0 -Message "E-Mail could not be sent: $($_.Exception.Message)" -WriteToLogFile $True
             $smtpSendResult = 0
         }
 
-        if ($smtpSendResult -eq 1)
-        {
+        if ($smtpSendResult -eq 1) {
             sPrint -Type 1 -Message "E-mail has been sent to the address(es): $MailTo" -WriteToLogFile $True
         }
 
         Remove-Variable -Name smtp
         Remove-Variable -Name MailFromPassword
     }
-    else
-    {
+    else {
         sPrint -Type 0 -Message "Missing parameter(s): -SMTPServer and(or) -MailFrom and(or) -MailTo" -WriteToLogFile $True
     }
 }
 
 sPrint -Type 1 "Completed!" -WriteToLogFile $True
-sPrint -Type 5 -Message "----- End   -----" -WriteToLogFile $true
+sPrint -Type 5 -Message "----- End -----" -WriteToLogFile $true
 
 #endregion
