@@ -23,6 +23,8 @@ It can be difficult to monitor and assess resources in large Hyper-V environment
 
 
 ## Version History and Change Log ##
+[x] Version 1.6 - Feb 2022
+* Updated to support Server 2016/2019/2022 and Windows 10
 
 [x] Version 1.5 - 15.March.2016
  
