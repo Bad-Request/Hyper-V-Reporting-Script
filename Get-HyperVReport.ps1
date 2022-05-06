@@ -2382,7 +2382,7 @@ if ($Cluster) {
                     $shortClusDiskID = $clusDiskID.TrimStart("MSCluster_Disk.Id=`"").TrimEnd("`"")
 
                     # Get physical disk information form MSFT_Disk
-                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
+                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
                     $diskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).PartitionStyle
                     $clusterDiskSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size -DiskVolumeSpaceUnit byte
                     $clusterDiskAllocatedSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize byte
