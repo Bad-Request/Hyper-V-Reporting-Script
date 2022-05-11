@@ -19,7 +19,8 @@
 
 		Version History:
 
-			[x] Version 1.6 - 24.February.2022
+			[x] Version 1.6.2 - 11 May 2022
+                * Fix typos with Convert-BusTypeName
 
 		Requirements:
 
@@ -511,7 +512,7 @@ Function sPrint {
 # }
 
 # Convert Volume Size to KB/MB/GB/TB
-Function sConvert-Size {
+Function Convert-Size {
 
     param (
  
@@ -623,7 +624,7 @@ Function sConvert-Size {
 }
 
 # Convert BusType Value to BusType Name
-Function sConvert-BusTypeName {
+Function Convert-BusTypeName {
     
     Param ([Byte] $BusTypeValue)
     
@@ -650,7 +651,7 @@ Function sConvert-BusTypeName {
 }
 
 # Convert Cluster Disk State Value to Name
-Function sConvert-ClusterDiskState {
+Function Convert-ClusterDiskState {
     
     Param ([Byte] $StateValue)
 
@@ -1331,9 +1332,9 @@ foreach ($vmHostItem in $vmHosts) {
     $TotalFreeMemoryPercentage = $null
      
     # Memory Capacty
-    $TotalUsedMemory = sConvert-Size -DiskVolumeSpace ($vmHostWmiData.TotalVisibleMemorySize - $vmHostWmiData.FreePhysicalMemory) -DiskVolumeSpaceUnit kb
-    $TotalFreeMemory = sConvert-Size -DiskVolumeSpace $vmHostWmiData.FreePhysicalMemory -DiskVolumeSpaceUnit kb
-    $TotalVisibleMemory = sConvert-Size -DiskVolumeSpace $vmHostWmiData.TotalVisibleMemorySize -DiskVolumeSpaceUnit kb
+    $TotalUsedMemory = Convert-Size -DiskVolumeSpace ($vmHostWmiData.TotalVisibleMemorySize - $vmHostWmiData.FreePhysicalMemory) -DiskVolumeSpaceUnit kb
+    $TotalFreeMemory = Convert-Size -DiskVolumeSpace $vmHostWmiData.FreePhysicalMemory -DiskVolumeSpaceUnit kb
+    $TotalVisibleMemory = Convert-Size -DiskVolumeSpace $vmHostWmiData.TotalVisibleMemorySize -DiskVolumeSpaceUnit kb
     $TotalFreeMemoryPercentage = [math]::round(($vmHostWmiData.FreePhysicalMemory / $vmHostWmiData.TotalVisibleMemorySize) * 100)
 
     # Free Memory Percentage Colors
@@ -1979,8 +1980,8 @@ ForEach ($VMHostItem in $VMHosts) {
                     $vmDiskName = $vmDisk.Path.Split('\')[-1]
                     $vmDiskPath = $vmDisk.Path
                     $vmDiskType = $vmDisk.VhdType
-                    $vmDiskMaxSize = sConvert-Size -DiskVolumeSpace $vmDisk.Size -DiskVolumeSpaceUnit byte
-                    $vmDiskFileSize = sConvert-Size -DiskVolumeSpace $vmDisk.FileSize -DiskVolumeSpaceUnit byte
+                    $vmDiskMaxSize = Convert-Size -DiskVolumeSpace $vmDisk.Size -DiskVolumeSpaceUnit byte
+                    $vmDiskFileSize = Convert-Size -DiskVolumeSpace $vmDisk.FileSize -DiskVolumeSpaceUnit byte
 
                     # For Cluster Overview
                     if ($VM.IsClustered -eq $true -and $VM.State -eq "Running") {
@@ -2058,8 +2059,8 @@ ForEach ($VMHostItem in $VMHosts) {
                             }
 
                             $vmDiskType = $vmDiffDisk.VhdType
-                            $vmDiskMaxSize = sConvert-Size -DiskVolumeSpace $vmDiffDisk.Size -DiskVolumeSpaceUnit byte
-                            $vmDiskFileSize = sConvert-Size -DiskVolumeSpace $vmDiffDisk.FileSize -DiskVolumeSpaceUnit byte
+                            $vmDiskMaxSize = Convert-Size -DiskVolumeSpace $vmDiffDisk.Size -DiskVolumeSpaceUnit byte
+                            $vmDiskFileSize = Convert-Size -DiskVolumeSpace $vmDiffDisk.FileSize -DiskVolumeSpaceUnit byte
 
                             # For Active VHD file size
                             $activeVhdFileSize = $activeVhdFileSize + $vmDiffDisk.FileSize
@@ -2169,19 +2170,19 @@ ForEach ($VMHostItem in $VMHosts) {
             # VM Memory Information
             if ($VM.DynamicMemoryEnabled) {
                 # Startup Memory
-                $outVmMemStartup = sConvert-Size -DiskVolumeSpace $VM.MemoryStartup -DiskVolumeSpaceUnit byte
+                $outVmMemStartup = Convert-Size -DiskVolumeSpace $VM.MemoryStartup -DiskVolumeSpaceUnit byte
 
                 # Assigned Memory
                 if ($VM.MemoryAssigned -eq 0) {
                     $outVmMemAssigned = "-"
                 }
                 else {
-                    $outVmMemAssigned = sConvert-Size -DiskVolumeSpace $VM.MemoryAssigned -DiskVolumeSpaceUnit byte
+                    $outVmMemAssigned = Convert-Size -DiskVolumeSpace $VM.MemoryAssigned -DiskVolumeSpaceUnit byte
                 }
 
                 # Maximum Memory, Minimum Memory
-                $outVmMemMax = sConvert-Size -DiskVolumeSpace $VM.MemoryMaximum -DiskVolumeSpaceUnit byte
-                $outVmMemMin = sConvert-Size -DiskVolumeSpace $VM.MemoryMinimum -DiskVolumeSpaceUnit byte
+                $outVmMemMax = Convert-Size -DiskVolumeSpace $VM.MemoryMaximum -DiskVolumeSpaceUnit byte
+                $outVmMemMin = Convert-Size -DiskVolumeSpace $VM.MemoryMinimum -DiskVolumeSpaceUnit byte
 
                 #$rowspanHTML = ""
                 # Charge chargerVmMemoryTable
@@ -2197,7 +2198,7 @@ ForEach ($VMHostItem in $VMHosts) {
             }
             else {
                 # Startup Memory
-                $outVmMemStartup = sConvert-Size -DiskVolumeSpace $VM.MemoryStartup -DiskVolumeSpaceUnit byte
+                $outVmMemStartup = Convert-Size -DiskVolumeSpace $VM.MemoryStartup -DiskVolumeSpaceUnit byte
 
                 # Charge chargerVmMemoryTable
                 $chargerVmMemoryTable = "
@@ -2382,11 +2383,11 @@ if ($Cluster) {
                     $shortClusDiskID = $clusDiskID.TrimStart("MSCluster_Disk.Id=`"").TrimEnd("`"")
 
                     # Get physical disk information form MSFT_Disk
-                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
+                    $busTypeName = Convert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
                     $diskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).PartitionStyle
-                    $clusterDiskSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size -DiskVolumeSpaceUnit byte
-                    $clusterDiskAllocatedSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize byte
-                    $clusterDiskUnAllocatedSize = sConvert-Size -DiskVolumeSpace (($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size - ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize) -DiskVolumeSpaceUnit byte
+                    $clusterDiskSize = Convert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size -DiskVolumeSpaceUnit byte
+                    $clusterDiskAllocatedSize = Convert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize byte
+                    $clusterDiskUnAllocatedSize = Convert-Size -DiskVolumeSpace (($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size - ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize) -DiskVolumeSpaceUnit byte
                     
                     # If maintenance mode enabled
                     if ($clusterDisk.StatusInformation -eq 1) {
@@ -2402,9 +2403,9 @@ if ($Cluster) {
                             $outDiskOwner = $clusterDisk.OwnerNode
                             $outBusType = $busTypeName
                             $outDiskPartStyle = $diskPartitionStyle
-                            $outVolumeTotalSize = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).Size -DiskVolumeSpaceUnit byte
-                            $outVolumeFreeSpace = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).FreeSpace -DiskVolumeSpaceUnit byte
-                            $outVolumeUsedSpace = sConvert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).UsedSpace -DiskVolumeSpaceUnit byte
+                            $outVolumeTotalSize = Convert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).Size -DiskVolumeSpaceUnit byte
+                            $outVolumeFreeSpace = Convert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).FreeSpace -DiskVolumeSpaceUnit byte
+                            $outVolumeUsedSpace = Convert-Size -DiskVolumeSpace (($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).UsedSpace -DiskVolumeSpaceUnit byte
                             $volumeFreePercent = [math]::Round((($clusDiskVolumeData.SharedVolumeInfo.Partition) | Where-Object { $_.Name -eq $clusDiskPartitionPath }).PercentFree)
                             $outVolumeFreePercent = "&nbsp;~%" + $volumeFreePercent + " free&nbsp;"
                             $outVolumeUsage = "CSV"
@@ -2438,16 +2439,16 @@ if ($Cluster) {
                             $outVolumeName = (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).MountPoints).Split("\")[-1]
                             $outVolumeLabel = ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).VolumeLabel
                             $outVolumeFS = ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FileSystem
-                            $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
+                            $outDiskState = (Convert-ClusterDiskState -StateValue $clusterDisk.State)
                             if ($outDiskState[0] -ne "Online") {
                                 $highL = $true
                             }
                             $outDiskOwner = $clusterDisk.OwnerNode
                             $outBusType = $busTypeName
                             $outDiskPartStyle = $diskPartitionStyle
-                            $outVolumeTotalSize = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize) -DiskVolumeSpaceUnit mb)
-                            $outVolumeFreeSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
-                            $outVolumeUsedSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                            $outVolumeTotalSize = (Convert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize) -DiskVolumeSpaceUnit mb)
+                            $outVolumeFreeSpace = (Convert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                            $outVolumeUsedSpace = (Convert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
                             $volumeFreePercent = [math]::Round((((($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).FreeSpace) / (($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize))) * 100)
                             $outVolumeFreePercent = "&nbsp;~%" + $volumeFreePercent + " free&nbsp;"
                             $outVolumeUsage = "CSV"
@@ -2471,8 +2472,8 @@ if ($Cluster) {
 
                             if ($chargerActiveVhd) {
                                 $activeVhdCount = $chargerActiveVhd.Count
-                                $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
-                                $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                                $activeVhdTotalFileSize = Convert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                                $activeVhdTotalDiskSize = Convert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
 
                                 # Color
                                 if ((($chargerActiveVhd.Size | Measure-Object -Sum).Sum) / 1024 / 1024 -gt ($clusDiskPartitionData | Where-Object { $_.Path -match $clusDiskPartitionPath }).TotalSize) {
@@ -2531,11 +2532,11 @@ if ($Cluster) {
                     $clusDiskPartitionPaths = ($clusDiskToDiskPartitionData | Where-Object { $_.GroupComponent -eq $clusDiskID }).PartComponent
 
                     # Get physical disk information form MSFT_Disk
-                    $busTypeName = sConvert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
+                    $busTypeName = Convert-BusTypeName -BusTypeValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).BusType
                     $diskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).PartitionStyle
-                    $clusterDiskSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size -DiskVolumeSpaceUnit byte
-                    $clusterDiskAllocatedSize = sConvert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize byte
-                    $clusterDiskUnAllocatedSize = sConvert-Size -DiskVolumeSpace (($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size - ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize) -DiskVolumeSpaceUnit byte
+                    $clusterDiskSize = Convert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size -DiskVolumeSpaceUnit byte
+                    $clusterDiskAllocatedSize = Convert-Size -DiskVolumeSpace ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize byte
+                    $clusterDiskUnAllocatedSize = Convert-Size -DiskVolumeSpace (($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).Size - ($msftDiskData | Where-Object { (($_.Signature -eq $shortClusDiskID) -or ($_.Guid -eq $shortClusDiskID)) }).AllocatedSize) -DiskVolumeSpaceUnit byte
 
                     # If partition(s) on physical disk exists
                     if ($clusDiskPartitionPaths) {
@@ -2556,7 +2557,7 @@ if ($Cluster) {
                                 $outDiskState = "Maintenance", "#BDD7EE", "#204F7A"
                             }
                             else {
-                                $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
+                                $outDiskState = (Convert-ClusterDiskState -StateValue $clusterDisk.State)
                             }
 
                             if ($outDiskState[0] -ne "Online") {
@@ -2598,9 +2599,9 @@ if ($Cluster) {
                             
                             # Volume Info
                             if (!$assignedPT) {
-                                $outVolumeTotalSize = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize) -DiskVolumeSpaceUnit mb)
-                                $outVolumeFreeSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
-                                $outVolumeUsedSpace = (sConvert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                                $outVolumeTotalSize = (Convert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize) -DiskVolumeSpaceUnit mb)
+                                $outVolumeFreeSpace = (Convert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
+                                $outVolumeUsedSpace = (Convert-Size -DiskVolumeSpace (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize - ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) -DiskVolumeSpaceUnit mb)
                                 $volumeFreePercent = [math]::Round((((($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).FreeSpace) / (($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize))) * 100)
                                 $outVolumeFreePercent = "&nbsp;~%" + $volumeFreePercent + " free&nbsp;"
 
@@ -2618,8 +2619,8 @@ if ($Cluster) {
 
                                 if ($chargerActiveVhd) {
                                     $activeVhdCount = $chargerActiveVhd.Count
-                                    $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
-                                    $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                                    $activeVhdTotalFileSize = Convert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                                    $activeVhdTotalDiskSize = Convert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
 
                                     # Color
                                     if ((($chargerActiveVhd.Size | Measure-Object -Sum).Sum) / 1024 / 1024 -gt ($clusDiskPartitionData | Where-Object { $_.__RELPATH -eq $clusDiskPartitionPath }).TotalSize) {
@@ -2696,7 +2697,7 @@ if ($Cluster) {
                             $outDiskState = "Maintenance", "#BDD7EE", "#204F7A"
                         }
                         else {
-                            $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
+                            $outDiskState = (Convert-ClusterDiskState -StateValue $clusterDisk.State)
                         }
 
                         if ($outDiskState[0] -ne "Online") {
@@ -2754,7 +2755,7 @@ if ($Cluster) {
             elseif (($clusterDisk.State -eq 3) -or ($clusterDisk.State -eq 127)) { # Offline
                 if ($HighlightsOnly -eq $false) {
                     $outDiskName = $clusterDisk.Name
-                    $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
+                    $outDiskState = (Convert-ClusterDiskState -StateValue $clusterDisk.State)
                     $outDiskOwner = $clusterDisk.OwnerNode
 
                     $outVolumeTable += "
@@ -2775,7 +2776,7 @@ if ($Cluster) {
             }
             elseif (($clusterDisk.State -eq 4) -or ($clusterDisk.State -eq 126)) { # Failed
                 $outDiskName = $clusterDisk.Name
-                $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
+                $outDiskState = (Convert-ClusterDiskState -StateValue $clusterDisk.State)
                 $outDiskOwner = $clusterDisk.OwnerNode
 
                 $outVolumeTable += "
@@ -2795,7 +2796,7 @@ if ($Cluster) {
             }
             else { # Others
                 $outDiskName = $clusterDisk.Name
-                $outDiskState = (sConvert-ClusterDiskState -StateValue $clusterDisk.State)
+                $outDiskState = (Convert-ClusterDiskState -StateValue $clusterDisk.State)
                 $outDiskOwner = $clusterDisk.OwnerNode
 
                 $outVolumeTable += "
@@ -2873,25 +2874,25 @@ if ($VMHost) {
                 $outLogicalDiskName = $LogicalDisk.Name
                 $outLogicalDiskVolumeName = $LogicalDisk.VolumeName
                 $outLogicalDiskFS = $LogicalDisk.FileSystem
-                $outLogicalDiskUsedSpace = sConvert-Size -DiskVolumeSpace ($LogicalDisk.Size - $LogicalDisk.FreeSpace) -DiskVolumeSpaceUnit byte
-                $outLogicalDiskFreeSpace = sConvert-Size -DiskVolumeSpace $LogicalDisk.FreeSpace -DiskVolumeSpaceUnit byte
-                $outLogicalDiskSize = sConvert-Size -DiskVolumeSpace $LogicalDisk.Size -DiskVolumeSpaceUnit byte
+                $outLogicalDiskUsedSpace = Convert-Size -DiskVolumeSpace ($LogicalDisk.Size - $LogicalDisk.FreeSpace) -DiskVolumeSpaceUnit byte
+                $outLogicalDiskFreeSpace = Convert-Size -DiskVolumeSpace $LogicalDisk.FreeSpace -DiskVolumeSpaceUnit byte
+                $outLogicalDiskSize = Convert-Size -DiskVolumeSpace $LogicalDisk.Size -DiskVolumeSpaceUnit byte
                 $LogicalDiskFreePercent = [math]::Round((($LogicalDisk.FreeSpace) / ($LogicalDisk.Size)) * 100)
                 $outLogicalDiskFreePercent = "&nbsp;~%" + $LogicalDiskFreePercent + " free&nbsp;"
 
                 # Physical disk information
                 $outPhysicalDiskName = $physicalDiskName.Replace("PHYSICALDRIVE", "Disk")
-                $outMsftDiskSize = sConvert-Size -DiskVolumeSpace $msftDisk.Size -DiskVolumeSpaceUnit byte
-                $outMsftDiskAllocatedSize = sConvert-Size -DiskVolumeSpace $msftDisk.AllocatedSize -DiskVolumeSpaceUnit byte
+                $outMsftDiskSize = Convert-Size -DiskVolumeSpace $msftDisk.Size -DiskVolumeSpaceUnit byte
+                $outMsftDiskAllocatedSize = Convert-Size -DiskVolumeSpace $msftDisk.AllocatedSize -DiskVolumeSpaceUnit byte
 
                 if (($msftDisk.Size -eq $null) -and ($msftDisk.AllocatedSize -eq $null)) {
                     $outmsftDiskUnallocatedSize = "N/A", ""
                 }
                 else {
-                    $outmsftDiskUnallocatedSize = sConvert-Size -DiskVolumeSpace ($msftDisk.Size - $msftDisk.AllocatedSize) -DiskVolumeSpaceUnit byte
+                    $outmsftDiskUnallocatedSize = Convert-Size -DiskVolumeSpace ($msftDisk.Size - $msftDisk.AllocatedSize) -DiskVolumeSpaceUnit byte
                 }
 
-                $outMsftDiskBusType = sConvert-BusTypeName -BusTypeValue $msftDisk.BusType
+                $outMsftDiskBusType = Convert-BusTypeName -BusTypeValue $msftDisk.BusType
                 $outMsftDiskPartitionStyle = sConvert-DiskPartitionStyle -PartitionStyleValue $msftDisk.PartitionStyle
                 $msftDiskState = "Online"
                 $msftDiskOwner = ($ComputerName).ToUpper()
@@ -2918,8 +2919,8 @@ if ($VMHost) {
 
                 if ($chargerActiveVhd) {
                     $activeVhdCount = $chargerActiveVhd.Count
-                    $activeVhdTotalFileSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
-                    $activeVhdTotalDiskSize = sConvert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                    $activeVhdTotalFileSize = Convert-Size -DiskVolumeSpace ($chargerActiveVhd.FileSize | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
+                    $activeVhdTotalDiskSize = Convert-Size -DiskVolumeSpace ($chargerActiveVhd.Size | Measure-Object -Sum).Sum -DiskVolumeSpaceUnit byte
 
                     # Color
                     if (($chargerActiveVhd.Size | Measure-Object -Sum).Sum -gt ($LogicalDisk.Size)) {
@@ -3015,21 +3016,21 @@ if ($ovTotalVm -eq $null) { $ovTotalVm = 0 }
 if ($ovRunningVm -eq $null) { $ovRunningVm = 0 }
 if ($ovTotalLP -eq $null) { $ovTotalLP = 0 }
 
-$ovUsedMemory = sConvert-Size -DiskVolumeSpace $ovUsedMemory -DiskVolumeSpaceUnit kb
+$ovUsedMemory = Convert-Size -DiskVolumeSpace $ovUsedMemory -DiskVolumeSpaceUnit kb
 if ($ovUsedMemory[0] -eq "N/A") { $ovUsedMemory = 0, "GB" }
-$ovTotalMemory = sConvert-Size -DiskVolumeSpace $ovTotalMemory -DiskVolumeSpaceUnit kb
+$ovTotalMemory = Convert-Size -DiskVolumeSpace $ovTotalMemory -DiskVolumeSpaceUnit kb
 if ($ovTotalMemory[0] -eq "N/A") { $ovTotalMemory = 0, "GB" }
-$ovUsedStorage = sConvert-Size -DiskVolumeSpace $ovUsedStorage -DiskVolumeSpaceUnit mb
+$ovUsedStorage = Convert-Size -DiskVolumeSpace $ovUsedStorage -DiskVolumeSpaceUnit mb
 if ($ovUsedStorage[0] -eq "N/A") { $ovUsedStorage = 0, "GB" }
-$ovTotalStorage = sConvert-Size -DiskVolumeSpace $ovTotalStorage -DiskVolumeSpaceUnit mb
+$ovTotalStorage = Convert-Size -DiskVolumeSpace $ovTotalStorage -DiskVolumeSpaceUnit mb
 if ($ovTotalStorage[0] -eq "N/A") { $ovTotalStorage = 0, "GB" }
-$ovUsedVmMemory = sConvert-Size -DiskVolumeSpace $ovUsedVmMemory -DiskVolumeSpaceUnit byte
+$ovUsedVmMemory = Convert-Size -DiskVolumeSpace $ovUsedVmMemory -DiskVolumeSpaceUnit byte
 if ($ovUsedVmMemory[0] -eq "N/A") { $ovUsedVmMemory = 0, "GB" }
-$ovTotalVmMemory = sConvert-Size -DiskVolumeSpace $ovTotalVmMemory -DiskVolumeSpaceUnit byte
+$ovTotalVmMemory = Convert-Size -DiskVolumeSpace $ovTotalVmMemory -DiskVolumeSpaceUnit byte
 if ($ovTotalVmMemory[0] -eq "N/A") { $ovTotalVmMemory = 0, "GB" }
-$ovUsedVmVHD = sConvert-Size -DiskVolumeSpace $ovUsedVmVHD -DiskVolumeSpaceUnit byte
+$ovUsedVmVHD = Convert-Size -DiskVolumeSpace $ovUsedVmVHD -DiskVolumeSpaceUnit byte
 if ($ovUsedVmVHD[0] -eq "N/A") { $ovUsedVmVHD = 0, "GB" }
-$ovTotalVmVHD = sConvert-Size -DiskVolumeSpace $ovTotalVmVHD -DiskVolumeSpaceUnit byte
+$ovTotalVmVHD = Convert-Size -DiskVolumeSpace $ovTotalVmVHD -DiskVolumeSpaceUnit byte
 if ($ovTotalVmVHD[0] -eq "N/A") { $ovTotalVmVHD = 0, "GB" }
 
 $outClusterOverview = "
