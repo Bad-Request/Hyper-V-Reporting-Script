@@ -1,5 +1,7 @@
 # Hyper-V Reporting Script (Powershell & HTML) #
 
+Forked from the original by GhostInTheWires.
+
 It can be difficult to monitor and assess resources in large Hyper-V environments. This Powershell based script helps you to understand virtualization inventory, capacity and general resource availability in your Standalone or Clustered Hyper-V Environment.
 
 
@@ -203,16 +205,8 @@ It can be difficult to monitor and assess resources in large Hyper-V environment
 
 .\Get-HyperVReport.ps1 -Cluster Hvcluster1 -SendMail $true -SMTPServer smtp.mailserver.com -SMTPPort 587 -MailFrom sender@hyperv.com -MailFromPassword P@ssw0rd -SMTPServerTLSorSSL $true -MailTo recepient1@hyperv.com,recepient2@hyperv.com
 
-<br>
-<br>
-<br>
-<br>
-<br>
 
 ###### Special Thanks ######
 
-<br>
-<br>
-<br>
 _Serhat Akinci_
 
